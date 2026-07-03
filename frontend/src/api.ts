@@ -58,6 +58,25 @@ async function handle<T>(res: Response): Promise<T> {
   return res.json() as Promise<T>
 }
 
+// Called when an authenticated request is rejected (expired/invalid token).
+let onUnauthorized: () => void = () => {}
+export function setUnauthorizedHandler(fn: () => void) {
+  onUnauthorized = fn
+}
+
+function checkAuth(res: Response) {
+  if (res.status === 401) {
+    setToken(null)
+    onUnauthorized()
+    throw new ApiError('Сессия истекла — войдите снова', 401)
+  }
+}
+
+async function handleAuthed<T>(res: Response): Promise<T> {
+  checkAuth(res)
+  return handle<T>(res)
+}
+
 // --- auth -----------------------------------------------------------------
 export async function register(email: string, password: string): Promise<{ token: string; email: string }> {
   return handle(
@@ -86,7 +105,7 @@ export async function checkHealth(): Promise<{ status: string }> {
 export async function uploadImage(file: File): Promise<AnalyzeResult> {
   const form = new FormData()
   form.append('file', file)
-  return handle(
+  return handleAuthed(
     await fetch(`${API_BASE_URL}/api/paintings`, {
       method: 'POST',
       headers: authHeaders(),
@@ -96,7 +115,7 @@ export async function uploadImage(file: File): Promise<AnalyzeResult> {
 }
 
 export async function segment(imageId: string, k: number): Promise<SegmentResult> {
-  return handle(
+  return handleAuthed(
     await fetch(`${API_BASE_URL}/api/paintings/${imageId}/colors`, {
       method: 'PATCH',
       headers: authHeaders({ 'Content-Type': 'application/json' }),
@@ -106,11 +125,12 @@ export async function segment(imageId: string, k: number): Promise<SegmentResult
 }
 
 export async function listPaintings(): Promise<PaintingSummary[]> {
-  return handle(await fetch(`${API_BASE_URL}/api/paintings`, { headers: authHeaders() }))
+  return handleAuthed(await fetch(`${API_BASE_URL}/api/paintings`, { headers: authHeaders() }))
 }
 
 async function fetchBlob(url: string): Promise<Blob> {
   const res = await fetch(url, { headers: authHeaders() })
+  checkAuth(res)
   if (!res.ok) throw new ApiError(`HTTP ${res.status}`, res.status)
   return res.blob()
 }

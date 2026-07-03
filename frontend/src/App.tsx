@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { checkHealth, getToken, setToken } from './api'
+import { checkHealth, getToken, setToken, setUnauthorizedHandler } from './api'
 import { AuthScreen } from './AuthScreen'
 import { Editor } from './Editor'
 import { History } from './History'
@@ -18,6 +18,16 @@ function App() {
     checkHealth()
       .then((r) => setHealth(r.status === 'ok' ? 'ok' : 'down'))
       .catch(() => setHealth('down'))
+  }, [])
+
+  // Log out automatically if an authenticated request is rejected (expired token).
+  useEffect(() => {
+    setUnauthorizedHandler(() => {
+      setToken(null)
+      localStorage.removeItem(EMAIL_KEY)
+      setTok(null)
+      setEmail('')
+    })
   }, [])
 
   function onAuth(newToken: string, newEmail: string) {

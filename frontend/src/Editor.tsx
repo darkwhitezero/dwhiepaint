@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   assetUrl,
   exportBlob,
@@ -25,6 +25,7 @@ export function Editor({ onSaved }: { onSaved: () => void }) {
   const [includeLegend, setIncludeLegend] = useState(true)
 
   const didInitialSegment = useRef(false)
+  const lastSegmentedK = useRef<number | null>(null)
 
   function onPickFile(f: File | null) {
     setFile(f)
@@ -33,21 +34,23 @@ export function Editor({ onSaved }: { onSaved: () => void }) {
     setPreviewUrl(null)
     setError(null)
     didInitialSegment.current = false
+    lastSegmentedK.current = null
     if (localPreview) URL.revokeObjectURL(localPreview)
     setLocalPreview(f ? URL.createObjectURL(f) : null)
   }
 
-  async function runSegment(id: string, colors: number) {
+  const runSegment = useCallback(async (id: string, colors: number) => {
     setBusy('segmenting')
     setError(null)
     try {
       setSeg(await segment(id, colors))
+      lastSegmentedK.current = colors
     } catch (e) {
       setError(String(e instanceof Error ? e.message : e))
     } finally {
       setBusy('idle')
     }
-  }
+  }, [])
 
   async function onCreate() {
     if (!file) return
@@ -59,6 +62,8 @@ export function Editor({ onSaved }: { onSaved: () => void }) {
       setPreviewUrl(res.preview_url)
       setK(res.predicted_k)
       didInitialSegment.current = true
+      // Mark this k as handled so the debounce effect doesn't double-segment.
+      lastSegmentedK.current = res.predicted_k
       await runSegment(res.image_id, res.predicted_k)
       onSaved()
     } catch (e) {
@@ -82,15 +87,13 @@ export function Editor({ onSaved }: { onSaved: () => void }) {
     }
   }
 
+  // Re-segment (debounced) whenever the user changes k after the first pass.
   useEffect(() => {
     if (!imageId || !didInitialSegment.current) return
-    const t = setTimeout(() => {
-      if (seg && seg.k === k) return
-      runSegment(imageId, k)
-    }, 400)
+    if (lastSegmentedK.current === k) return
+    const t = setTimeout(() => runSegment(imageId, k), 400)
     return () => clearTimeout(t)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [k, imageId])
+  }, [k, imageId, runSegment])
 
   return (
     <section className="editor">
