@@ -42,6 +42,11 @@ public static class PaintingEndpoints
         if (file.Length == 0) return Results.BadRequest(new { error = "empty file" });
 
         var userId = principal.GetUserId();
+        // The JWT can outlive the user row (e.g. account removed, dev DB reset);
+        // fail fast with 401 instead of a 500 on the FK constraint below.
+        if (!await db.Users.AnyAsync(u => u.Id == userId, ct))
+            return Results.Unauthorized();
+
         byte[] bytes;
         await using (var ms = new MemoryStream())
         {
