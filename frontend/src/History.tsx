@@ -6,8 +6,24 @@ import {
   triggerDownload,
   type PaintingSummary,
 } from './api'
+import { useToast } from './Toast'
 
-export function History({ reloadSignal }: { reloadSignal: number }) {
+const DATE_FMT: Intl.DateTimeFormatOptions = {
+  day: 'numeric',
+  month: 'short',
+  year: 'numeric',
+  hour: '2-digit',
+  minute: '2-digit',
+}
+
+export function History({
+  reloadSignal,
+  onCreateNew,
+}: {
+  reloadSignal: number
+  onCreateNew: () => void
+}) {
+  const toast = useToast()
   const [items, setItems] = useState<PaintingSummary[]>([])
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
@@ -25,35 +41,79 @@ export function History({ reloadSignal }: { reloadSignal: number }) {
 
   async function download(id: string) {
     try {
-      triggerDownload(await resultBlob(id), `dwhiepaint-${id}.pdf`)
+      const blob = await resultBlob(id)
+      const ext = blob.type === 'image/png' ? 'png' : 'pdf'
+      triggerDownload(blob, `dwhiepaint-${id}.${ext}`)
     } catch (e) {
-      setError(String(e instanceof Error ? e.message : e))
+      toast.error(String(e instanceof Error ? e.message : e))
     }
   }
 
   return (
-    <aside className="history">
-      <h2>Мои работы</h2>
-      {loading && <p className="muted">Загрузка…</p>}
-      {error && <p className="error">{error}</p>}
-      {!loading && items.length === 0 && <p className="muted">Пока нет работ.</p>}
+    <div className="history">
+      <div className="section-head">
+        <h1>История</h1>
+        <p className="lead">Ваши раскраски — скачивайте готовые файлы в любой момент.</p>
+      </div>
 
-      <ul>
-        {items.map((p) => (
-          <li key={p.image_id}>
-            <img src={assetUrl(p.original_url)} alt="" />
-            <div className="meta">
-              <span>{p.color_count} цветов</span>
-              <span className="muted">{new Date(p.created_at).toLocaleString('ru-RU')}</span>
+      {loading && (
+        <div className="grid">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <div className="card card-skeleton" key={i}>
+              <div className="card-thumb skeleton" />
+              <div className="card-body">
+                <div className="skeleton skeleton-line" />
+                <div className="skeleton skeleton-line short" />
+              </div>
             </div>
-            {p.has_result ? (
-              <button onClick={() => download(p.image_id)}>Скачать</button>
-            ) : (
-              <span className="muted small">{p.status}</span>
-            )}
-          </li>
-        ))}
-      </ul>
-    </aside>
+          ))}
+        </div>
+      )}
+
+      {error && (
+        <p className="inline-error" role="alert">
+          {error}
+        </p>
+      )}
+
+      {!loading && !error && items.length === 0 && (
+        <div className="empty panel">
+          <span className="empty-title">Пока пусто</span>
+          <span className="empty-sub">Создайте первую раскраску из фотографии.</span>
+          <button className="btn btn-primary" onClick={onCreateNew}>
+            Создать раскраску
+          </button>
+        </div>
+      )}
+
+      {!loading && items.length > 0 && (
+        <div className="grid">
+          {items.map((p, i) => (
+            <article
+              className="card"
+              key={p.image_id}
+              style={{ '--i': i } as React.CSSProperties}
+            >
+              <div className="card-thumb">
+                <img src={assetUrl(p.original_url)} alt="" loading="lazy" />
+              </div>
+              <div className="card-body">
+                <span className="card-title">{p.color_count} цветов</span>
+                <span className="card-date">
+                  {new Date(p.created_at).toLocaleString('ru-RU', DATE_FMT)}
+                </span>
+              </div>
+              {p.has_result ? (
+                <button className="btn btn-ghost btn-sm" onClick={() => download(p.image_id)}>
+                  Скачать
+                </button>
+              ) : (
+                <span className="card-status">{p.status}</span>
+              )}
+            </article>
+          ))}
+        </div>
+      )}
+    </div>
   )
 }

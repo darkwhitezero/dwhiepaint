@@ -25,29 +25,37 @@ export function AuthScreen({ onAuth }: { onAuth: (token: string, email: string) 
 
   return (
     <div className="auth">
-      <h1 className="wordmark">dwhiepaint</h1>
-      <p className="subtitle">Фото → раскраска по номерам</p>
+      <div className="auth-brand">
+        <img src="/favicon.svg" alt="" width={34} height={33} />
+        <span>dwhiepaint</span>
+      </div>
+      <h1 className="auth-title">Раскраска по номерам из&nbsp;фото</h1>
+      <p className="auth-lead">Войдите, чтобы создавать и хранить свои работы.</p>
 
-      <form className="auth-card" onSubmit={submit}>
-        <div className="tabs">
+      <form className="auth-card panel" onSubmit={submit}>
+        <div className="segmented segmented-lg" role="radiogroup" aria-label="Вход или регистрация">
           <button
             type="button"
-            className={mode === 'login' ? 'active' : ''}
+            role="radio"
+            aria-checked={mode === 'login'}
+            className={`segmented-item${mode === 'login' ? ' is-active' : ''}`}
             onClick={() => setMode('login')}
           >
             Вход
           </button>
           <button
             type="button"
-            className={mode === 'register' ? 'active' : ''}
+            role="radio"
+            aria-checked={mode === 'register'}
+            className={`segmented-item${mode === 'register' ? ' is-active' : ''}`}
             onClick={() => setMode('register')}
           >
             Регистрация
           </button>
         </div>
 
-        <label>
-          Email
+        <label className="field">
+          <span>Email</span>
           <input
             type="email"
             value={email}
@@ -56,8 +64,8 @@ export function AuthScreen({ onAuth }: { onAuth: (token: string, email: string) 
             required
           />
         </label>
-        <label>
-          Пароль
+        <label className="field">
+          <span>Пароль</span>
           <input
             type="password"
             value={password}
@@ -69,15 +77,15 @@ export function AuthScreen({ onAuth }: { onAuth: (token: string, email: string) 
         </label>
 
         {error && (
-          <p className="error" role="alert">
+          <p className="inline-error" role="alert">
             {error}
           </p>
         )}
 
-        <button className="primary" type="submit" disabled={busy}>
-          {busy ? '…' : mode === 'login' ? 'Войти' : 'Создать аккаунт'}
+        <button className="btn btn-primary btn-block" type="submit" disabled={busy}>
+          {busy ? 'Подождите…' : mode === 'login' ? 'Войти' : 'Создать аккаунт'}
         </button>
-        {mode === 'register' && <small>Пароль — минимум 8 символов.</small>}
+        {mode === 'register' && <small className="field-hint">Пароль — минимум 8 символов.</small>}
       </form>
     </div>
   )

@@ -1,8 +1,12 @@
 import { useEffect, useState } from 'react'
 import { checkHealth, getToken, setToken, setUnauthorizedHandler } from './api'
 import { AuthScreen } from './AuthScreen'
+import { NavBar } from './NavBar'
 import { Editor } from './Editor'
 import { History } from './History'
+import { Account } from './Account'
+import { ToastProvider } from './Toast'
+import { useTab } from './useTab'
 import './App.css'
 
 type Health = 'checking' | 'ok' | 'down'
@@ -13,6 +17,7 @@ function App() {
   const [email, setEmail] = useState<string>(localStorage.getItem(EMAIL_KEY) ?? '')
   const [health, setHealth] = useState<Health>('checking')
   const [reloadSignal, setReloadSignal] = useState(0)
+  const [tab, setTab] = useTab()
 
   useEffect(() => {
     checkHealth()
@@ -35,6 +40,7 @@ function App() {
     localStorage.setItem(EMAIL_KEY, newEmail)
     setTok(newToken)
     setEmail(newEmail)
+    setTab('create')
   }
 
   function logout() {
@@ -44,32 +50,32 @@ function App() {
     setEmail('')
   }
 
-  if (!token) return <AuthScreen onAuth={onAuth} />
+  if (!token)
+    return (
+      <ToastProvider>
+        <AuthScreen onAuth={onAuth} />
+      </ToastProvider>
+    )
 
   return (
-    <main className="app">
-      <header className="header">
-        <div>
-          <h1 className="wordmark">dwhiepaint</h1>
-          <p className="subtitle">Фото → раскраска по номерам</p>
-        </div>
-        <div className="header-right">
-          <span className={`badge badge--${health}`}>
-            API:{' '}
-            {health === 'checking' ? 'проверка…' : health === 'ok' ? 'на связи' : 'недоступен'}
-          </span>
-          <span className="user">{email}</span>
-          <button className="link" onClick={logout}>
-            Выйти
-          </button>
-        </div>
-      </header>
-
-      <div className="layout">
-        <Editor onSaved={() => setReloadSignal((n) => n + 1)} />
-        <History reloadSignal={reloadSignal} />
+    <ToastProvider>
+      <div className="app-shell">
+        <NavBar tab={tab} onTab={setTab} health={health} email={email} />
+        <main className="app-main">
+          {/* All panels stay mounted (Editor keeps in-progress work across tab
+              switches); hiding an inactive panel restarts its enter animation. */}
+          <section className="tab-panel" hidden={tab !== 'create'}>
+            <Editor onSaved={() => setReloadSignal((n) => n + 1)} />
+          </section>
+          <section className="tab-panel" hidden={tab !== 'history'}>
+            <History reloadSignal={reloadSignal} onCreateNew={() => setTab('create')} />
+          </section>
+          <section className="tab-panel" hidden={tab !== 'account'}>
+            <Account email={email} reloadSignal={reloadSignal} onLogout={logout} />
+          </section>
+        </main>
       </div>
-    </main>
+    </ToastProvider>
   )
 }
 

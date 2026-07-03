@@ -25,10 +25,10 @@ FONT_PATH_BOLD = os.getenv(
     "FONT_PATH_BOLD", "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
 )
 
-# Printable page sizes in pixels at 300 dpi (portrait).
+# Printable page sizes in pixels at 600 dpi (portrait).
 PAGE_SIZES_PX = {
-    "A4": (2480, 3508),
-    "A3": (3508, 4961),
+    "A4": (4960, 7016),
+    "A3": (7016, 9922),
 }
 
 CACHE_DIR.mkdir(parents=True, exist_ok=True)

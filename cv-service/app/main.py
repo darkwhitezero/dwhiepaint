@@ -22,6 +22,7 @@ class ExportRequest(BaseModel):
     image_id: str
     page_size: str = "A4"
     include_legend: bool = True
+    format: str = "pdf"
 
 
 class PaletteColor(BaseModel):
@@ -73,5 +74,11 @@ def export(req: ExportRequest):
     if entry.segmentation is None:
         raise HTTPException(status_code=409, detail="segment the image before export")
 
-    pdf = export_mod.compose_export(entry, req.page_size, req.include_legend)
-    return Response(content=pdf, media_type="application/pdf")
+    fmt = req.format.lower()
+    if fmt == "png":
+        png = export_mod.compose_png(entry, req.page_size)
+        return Response(content=png, media_type="image/png")
+    if fmt == "pdf":
+        pdf = export_mod.compose_export(entry, req.page_size, req.include_legend)
+        return Response(content=pdf, media_type="application/pdf")
+    raise HTTPException(status_code=400, detail=f"unsupported format: {req.format}")

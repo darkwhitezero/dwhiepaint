@@ -20,10 +20,14 @@ from .cache import ImageEntry, PaletteEntry
 
 Rect = tuple[int, int, int, int]  # x, y, w, h
 
-# Minimum legend column width (px @300dpi) so long Russian names fit without truncation.
-LEGEND_MIN_COL_W = 1000
-LEGEND_MAX_ROW_H = 150
-DPI = 300
+DPI = 600
+# The px constants below were tuned at 300 dpi; scale them so physical sizes
+# (line thickness, legend columns, swatches) stay constant as DPI changes.
+_SCALE = DPI / 300
+
+# Minimum legend column width so long Russian names fit without truncation.
+LEGEND_MIN_COL_W = round(1000 * _SCALE)
+LEGEND_MAX_ROW_H = round(150 * _SCALE)
 
 
 def _load_font(path: str, size: int) -> ImageFont.FreeTypeFont:
@@ -66,6 +70,26 @@ def compose_export(entry: ImageEntry, page_size: str = "A4",
         buf, format="PDF", resolution=float(DPI),
         save_all=True, append_images=pages[1:],
     )
+    return buf.getvalue()
+
+
+def compose_png(entry: ImageEntry, page_size: str = "A4") -> bytes:
+    """Return a PNG of just the coloring sheet at the target print resolution.
+
+    PNG is meant for on-screen use / sharing, so it carries only the coloring
+    page; the legend stays a print-oriented (PDF) concept.
+    """
+    seg = entry.segmentation
+    if seg is None:
+        raise ValueError("image has not been segmented yet")
+
+    src_h, src_w = seg.label_img.shape
+    landscape = src_w > src_h
+    page_w, page_h = _page_dimensions(page_size, landscape)
+
+    page = _coloring_page(seg, page_w, page_h)
+    buf = io.BytesIO()
+    page.save(buf, format="PNG", dpi=(DPI, DPI))
     return buf.getvalue()
 
 
@@ -117,7 +141,8 @@ def _paste_artwork(page: Image.Image, draw: ImageDraw.ImageDraw,
 
     scaled_label = cv2.resize(seg.label_img.astype(np.int32), (tw, th),
                               interpolation=cv2.INTER_NEAREST)
-    art = render.line_art(scaled_label, seg.palette, thickness=3, min_label_radius=11)
+    art = render.line_art(scaled_label, seg.palette,
+                          thickness=round(3 * _SCALE), min_label_radius=11 * _SCALE)
 
     ox, oy = ax + (aw - tw) // 2, ay + (ah - th) // 2
     page.paste(Image.fromarray(art), (ox, oy))
@@ -134,7 +159,7 @@ def _draw_legend(draw: ImageDraw.ImageDraw, palette: list[PaletteEntry],
     row_h = min(lh / rows, LEGEND_MAX_ROW_H)
     col_w = lw / cols
 
-    swatch = max(24, int(min(row_h * 0.6, 72)))
+    swatch = max(round(24 * _SCALE), int(min(row_h * 0.6, 72 * _SCALE)))
     font = _load_font(config.FONT_PATH, int(swatch * 0.5))
     hex_font = _load_font(config.FONT_PATH, int(swatch * 0.36))
     pad = int(swatch * 0.45)
@@ -146,7 +171,8 @@ def _draw_legend(draw: ImageDraw.ImageDraw, palette: list[PaletteEntry],
         sy = y + (row_h - swatch) / 2
 
         rgb = tuple(int(c.hex[j:j + 2], 16) for j in (1, 3, 5))
-        draw.rectangle([x, sy, x + swatch, sy + swatch], fill=rgb, outline="black", width=2)
+        draw.rectangle([x, sy, x + swatch, sy + swatch], fill=rgb,
+                       outline="black", width=round(2 * _SCALE))
 
         text_x = x + swatch + pad
         max_w = col_w - swatch - pad * 2

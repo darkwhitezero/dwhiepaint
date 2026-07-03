@@ -111,12 +111,12 @@ public static class PaintingEndpoints
     private static async Task<IResult> ExportPainting(
         Guid id, ClaimsPrincipal principal, CvClient cv, AppDbContext db,
         FileStorage storage, CancellationToken ct,
-        string pageSize = "A4", bool includeLegend = true)
+        string pageSize = "A4", bool includeLegend = true, string format = "pdf")
     {
         var painting = await OwnedPainting(db, id, principal.GetUserId(), ct);
         if (painting is null) return Results.NotFound();
 
-        var (bytes, contentType) = await cv.ExportAsync(id.ToString(), pageSize, includeLegend, ct);
+        var (bytes, contentType) = await cv.ExportAsync(id.ToString(), pageSize, includeLegend, format, ct);
         var ext = FileStorage.ExtForContentType(contentType);
         painting.ResultPath = await storage.SaveResultAsync(id, bytes, ext, ct);
         painting.Status = PaintingStatus.Done;

@@ -135,12 +135,19 @@ async function fetchBlob(url: string): Promise<Blob> {
   return res.blob()
 }
 
+export type ExportFormat = 'pdf' | 'png'
+
 export async function exportBlob(
   imageId: string,
   pageSize: string,
   includeLegend: boolean,
+  format: ExportFormat,
 ): Promise<Blob> {
-  const q = new URLSearchParams({ pageSize, includeLegend: String(includeLegend) })
+  const q = new URLSearchParams({
+    pageSize,
+    includeLegend: String(includeLegend),
+    format,
+  })
   return fetchBlob(`${API_BASE_URL}/api/paintings/${imageId}/export?${q}`)
 }
 export async function resultBlob(imageId: string): Promise<Blob> {
@@ -149,6 +156,14 @@ export async function resultBlob(imageId: string): Promise<Blob> {
 
 export function assetUrl(path: string): string {
   return `${API_BASE_URL}${path}`
+}
+
+// Client-side guard so obviously-wrong files never hit the network.
+const MAX_UPLOAD_BYTES = 15 * 1024 * 1024
+export function validateImageFile(file: File): string | null {
+  if (!file.type.startsWith('image/')) return 'Нужен файл изображения (JPG или PNG).'
+  if (file.size > MAX_UPLOAD_BYTES) return 'Файл больше 15 МБ — выберите поменьше.'
+  return null
 }
 
 export function triggerDownload(blob: Blob, filename: string) {
