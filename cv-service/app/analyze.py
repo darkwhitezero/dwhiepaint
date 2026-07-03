@@ -61,10 +61,10 @@ def _auto_k(lab_pixels: np.ndarray) -> int:
     return best_k
 
 
-def analyze(file_bytes: bytes) -> tuple[str, int, str]:
+def analyze(file_bytes: bytes) -> dict:
     """Run preprocessing + auto-k, cache the entry, and render a preview.
 
-    Returns (image_id, predicted_k, preview_url).
+    Returns {image_id, predicted_k, preview_url, width, height}.
     """
     rgb = _decode_and_resize(file_bytes)
     lab = rgb2lab(rgb.astype(np.float64) / 255.0)
@@ -77,4 +77,10 @@ def analyze(file_bytes: bytes) -> tuple[str, int, str]:
     cache.put(entry)
 
     preview_url = storage.save_rgb_png(image_id, "preview.png", rgb)
-    return image_id, predicted_k, preview_url
+    return {
+        "image_id": image_id,
+        "predicted_k": predicted_k,
+        "preview_url": preview_url,
+        "width": entry.width,
+        "height": entry.height,
+    }

@@ -1,12 +1,17 @@
+using System.Security.Claims;
 using System.Text.Json.Nodes;
+using DwhiePaint.Api.Auth;
+using DwhiePaint.Api.Data;
+using DwhiePaint.Api.Domain;
 using DwhiePaint.Api.Services;
+using Microsoft.EntityFrameworkCore;
 
 namespace DwhiePaint.Api.Endpoints;
 
 /// <summary>
-/// Phase 1 painting endpoints — thin proxies over the CV service, no persistence yet.
-/// Cache URLs returned by cv-service are rewritten so the browser only ever talks
-/// to the backend (which passes image bytes through /api/cv-cache).
+/// Painting endpoints. Data/JSON routes require auth and are scoped to the current
+/// user. Image-byte routes (previews, region maps, original thumbnails) are served
+/// anonymously by unguessable UUID so plain &lt;img&gt; tags can load them.
 /// </summary>
 public static class PaintingEndpoints
 {
@@ -14,44 +19,192 @@ public static class PaintingEndpoints
 
     public static IEndpointRouteBuilder MapPaintingEndpoints(this IEndpointRouteBuilder app)
     {
-        var group = app.MapGroup("/api/paintings");
+        var group = app.MapGroup("/api/paintings").RequireAuthorization();
 
-        group.MapPost("", async (IFormFile file, CvClient cv, CancellationToken ct) =>
-        {
-            if (file.Length == 0)
-                return Results.BadRequest(new { error = "empty file" });
+        group.MapPost("", CreatePainting).DisableAntiforgery();
+        group.MapGet("", ListPaintings);
+        group.MapGet("/{id:guid}", GetPainting);
+        group.MapPatch("/{id:guid}/colors", SetColors);
+        group.MapGet("/{id:guid}/export", ExportPainting);
+        group.MapGet("/{id:guid}/result", DownloadResult);
 
-            await using var stream = file.OpenReadStream();
-            var result = await cv.AnalyzeAsync(stream, file.FileName, file.ContentType, ct);
-            RewriteCacheUrl(result, "preview_url");
-            return Results.Json(result);
-        }).DisableAntiforgery();
-
-        group.MapPatch("/{id}/colors", async (
-            string id, ColorsRequest body, CvClient cv, CancellationToken ct) =>
-        {
-            var result = await cv.SegmentAsync(id, body.K, ct);
-            RewriteCacheUrl(result, "region_map_url");
-            return Results.Json(result);
-        });
-
-        group.MapGet("/{id}/export", async (
-            string id, CvClient cv, CancellationToken ct, string pageSize = "A4") =>
-        {
-            var png = await cv.ExportAsync(id, pageSize, ct);
-            return Results.File(png, "image/png", $"dwhiepaint-{id}.png");
-        });
-
-        // Passthrough for cv-service cache files (previews, region maps).
-        app.MapGet("/api/cv-cache/{id}/{file}", async (
-            string id, string file, CvClient cv, CancellationToken ct) =>
-        {
-            var (bytes, contentType) = await cv.GetCacheFileAsync(id, file, ct);
-            return Results.File(bytes, contentType);
-        });
+        // Anonymous image bytes (opaque UUID).
+        app.MapGet("/api/paintings/{id:guid}/original", GetOriginal);
+        app.MapGet("/api/cv-cache/{id:guid}/{file}", GetCvCache);
 
         return app;
     }
+
+    private static async Task<IResult> CreatePainting(
+        IFormFile file, ClaimsPrincipal principal, CvClient cv, AppDbContext db,
+        FileStorage storage, CancellationToken ct)
+    {
+        if (file.Length == 0) return Results.BadRequest(new { error = "empty file" });
+
+        var userId = principal.GetUserId();
+        byte[] bytes;
+        await using (var ms = new MemoryStream())
+        {
+            await file.CopyToAsync(ms, ct);
+            bytes = ms.ToArray();
+        }
+
+        var result = await cv.AnalyzeAsync(new MemoryStream(bytes), file.FileName, file.ContentType, ct);
+        var imageId = Guid.Parse(result["image_id"]!.GetValue<string>());
+        var predictedK = result["predicted_k"]!.GetValue<int>();
+        var width = result["width"]!.GetValue<int>();
+        var height = result["height"]!.GetValue<int>();
+
+        var originalPath = await storage.SaveOriginalAsync(imageId, bytes, file.FileName, ct);
+
+        db.Images.Add(new Image
+        {
+            Id = imageId, UserId = userId, OriginalPath = originalPath,
+            Width = width, Height = height,
+        });
+        db.Paintings.Add(new Painting
+        {
+            Id = imageId, ImageId = imageId, ColorCount = predictedK,
+            Status = PaintingStatus.Processing,
+        });
+        await db.SaveChangesAsync(ct);
+
+        RewriteCacheUrl(result, "preview_url");
+        return Results.Json(result);
+    }
+
+    private static async Task<IResult> SetColors(
+        Guid id, ColorsRequest body, ClaimsPrincipal principal,
+        CvClient cv, AppDbContext db, CancellationToken ct)
+    {
+        var painting = await OwnedPainting(db, id, principal.GetUserId(), ct);
+        if (painting is null) return Results.NotFound();
+
+        var result = await cv.SegmentAsync(id.ToString(), body.K, ct);
+
+        var existing = db.PaletteColors.Where(p => p.PaintingId == painting.Id);
+        db.PaletteColors.RemoveRange(existing);
+
+        foreach (var node in result["palette"]!.AsArray())
+        {
+            var lab = node!["lab"]!.AsArray();
+            db.PaletteColors.Add(new PaletteColor
+            {
+                PaintingId = painting.Id,
+                ColorIndex = node["index"]!.GetValue<int>(),
+                Hex = node["hex"]!.GetValue<string>(),
+                LabL = (float)lab[0]!.GetValue<double>(),
+                LabA = (float)lab[1]!.GetValue<double>(),
+                LabB = (float)lab[2]!.GetValue<double>(),
+                NameRu = node["name_ru"]!.GetValue<string>(),
+                NameEn = node["name_en"]?.GetValue<string?>(),
+            });
+        }
+
+        painting.ColorCount = result["k"]!.GetValue<int>();
+        await db.SaveChangesAsync(ct);
+
+        RewriteCacheUrl(result, "region_map_url");
+        return Results.Json(result);
+    }
+
+    private static async Task<IResult> ExportPainting(
+        Guid id, ClaimsPrincipal principal, CvClient cv, AppDbContext db,
+        FileStorage storage, CancellationToken ct, string pageSize = "A4")
+    {
+        var painting = await OwnedPainting(db, id, principal.GetUserId(), ct);
+        if (painting is null) return Results.NotFound();
+
+        var png = await cv.ExportAsync(id.ToString(), pageSize, ct);
+        painting.ResultPath = await storage.SaveResultAsync(id, pageSize, png, ct);
+        painting.Status = PaintingStatus.Done;
+        await db.SaveChangesAsync(ct);
+
+        return Results.File(png, "image/png", $"dwhiepaint-{id}.png");
+    }
+
+    private static async Task<IResult> DownloadResult(
+        Guid id, ClaimsPrincipal principal, AppDbContext db, CancellationToken ct)
+    {
+        var painting = await OwnedPainting(db, id, principal.GetUserId(), ct);
+        if (painting?.ResultPath is null || !File.Exists(painting.ResultPath))
+            return Results.NotFound();
+
+        var bytes = await File.ReadAllBytesAsync(painting.ResultPath, ct);
+        return Results.File(bytes, "image/png", $"dwhiepaint-{id}.png");
+    }
+
+    private static async Task<IResult> ListPaintings(
+        ClaimsPrincipal principal, AppDbContext db, CancellationToken ct)
+    {
+        var userId = principal.GetUserId();
+        var items = await (
+            from p in db.Paintings
+            join img in db.Images on p.ImageId equals img.Id
+            where img.UserId == userId
+            orderby p.CreatedAt descending
+            select new
+            {
+                image_id = p.ImageId,
+                color_count = p.ColorCount,
+                status = p.Status,
+                created_at = p.CreatedAt,
+                has_result = p.ResultPath != null,
+                original_url = $"/api/paintings/{p.ImageId}/original",
+            }).ToListAsync(ct);
+
+        return Results.Ok(items);
+    }
+
+    private static async Task<IResult> GetPainting(
+        Guid id, ClaimsPrincipal principal, AppDbContext db, CancellationToken ct)
+    {
+        var userId = principal.GetUserId();
+        var painting = await OwnedPainting(db, id, userId, ct);
+        if (painting is null) return Results.NotFound();
+
+        var palette = await db.PaletteColors
+            .Where(c => c.PaintingId == painting.Id)
+            .OrderBy(c => c.ColorIndex)
+            .Select(c => new
+            {
+                index = c.ColorIndex, hex = c.Hex,
+                lab = new[] { c.LabL, c.LabA, c.LabB },
+                name_ru = c.NameRu, name_en = c.NameEn,
+            })
+            .ToListAsync(ct);
+
+        return Results.Ok(new
+        {
+            image_id = painting.ImageId,
+            color_count = painting.ColorCount,
+            status = painting.Status,
+            has_result = painting.ResultPath != null,
+            original_url = $"/api/paintings/{painting.ImageId}/original",
+            palette,
+        });
+    }
+
+    private static async Task<IResult> GetOriginal(Guid id, AppDbContext db, CancellationToken ct)
+    {
+        var image = await db.Images.FirstOrDefaultAsync(i => i.Id == id, ct);
+        if (image is null || !File.Exists(image.OriginalPath)) return Results.NotFound();
+
+        var bytes = await File.ReadAllBytesAsync(image.OriginalPath, ct);
+        return Results.File(bytes, FileStorage.GuessContentType(image.OriginalPath));
+    }
+
+    private static async Task<IResult> GetCvCache(Guid id, string file, CvClient cv, CancellationToken ct)
+    {
+        var (bytes, contentType) = await cv.GetCacheFileAsync(id.ToString(), file, ct);
+        return Results.File(bytes, contentType);
+    }
+
+    private static Task<Painting?> OwnedPainting(AppDbContext db, Guid imageId, Guid userId, CancellationToken ct) =>
+        (from p in db.Paintings
+         join img in db.Images on p.ImageId equals img.Id
+         where p.ImageId == imageId && img.UserId == userId
+         select p).FirstOrDefaultAsync(ct);
 
     private static void RewriteCacheUrl(JsonNode? node, string field)
     {

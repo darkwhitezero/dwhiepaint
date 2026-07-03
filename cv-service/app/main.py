@@ -42,10 +42,9 @@ async def analyze(file: UploadFile = File(...)):
     if not data:
         raise HTTPException(status_code=400, detail="empty upload")
     try:
-        image_id, predicted_k, preview_url = analyze_mod.analyze(data)
+        return analyze_mod.analyze(data)
     except Exception as exc:  # noqa: BLE001 — surface decode/processing failures
         raise HTTPException(status_code=422, detail=f"could not process image: {exc}")
-    return {"image_id": image_id, "predicted_k": predicted_k, "preview_url": preview_url}
 
 
 @app.post("/segment")

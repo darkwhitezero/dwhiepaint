@@ -1,8 +1,12 @@
+using System.Text;
+using DwhiePaint.Api.Auth;
 using DwhiePaint.Api.Data;
 using DwhiePaint.Api.Endpoints;
 using DwhiePaint.Api.Services;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.IdentityModel.Tokens;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -19,6 +23,30 @@ builder.Services.AddHttpClient<CvClient>(client =>
     client.Timeout = TimeSpan.FromSeconds(120);
 });
 
+builder.Services.AddSingleton<FileStorage>();
+builder.Services.AddScoped<TokenService>();
+
+// --- Authentication (JWT) ---------------------------------------------------
+builder.Services.Configure<JwtOptions>(builder.Configuration.GetSection(JwtOptions.SectionName));
+var jwt = builder.Configuration.GetSection(JwtOptions.SectionName).Get<JwtOptions>()
+          ?? throw new InvalidOperationException("Jwt configuration is missing");
+
+builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+    .AddJwtBearer(options =>
+    {
+        options.TokenValidationParameters = new TokenValidationParameters
+        {
+            ValidateIssuer = true,
+            ValidateAudience = true,
+            ValidateLifetime = true,
+            ValidateIssuerSigningKey = true,
+            ValidIssuer = jwt.Issuer,
+            ValidAudience = jwt.Audience,
+            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwt.Secret)),
+        };
+    });
+builder.Services.AddAuthorization();
+
 builder.Services.AddCors(options =>
     options.AddDefaultPolicy(policy =>
         policy.WithOrigins(builder.Configuration["Cors__Origin"] ?? "http://localhost:5173")
@@ -33,6 +61,8 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseCors();
+app.UseAuthentication();
+app.UseAuthorization();
 
 // Translate CV service failures into meaningful HTTP responses.
 app.UseExceptionHandler(errApp => errApp.Run(async context =>
@@ -47,9 +77,10 @@ app.UseExceptionHandler(errApp => errApp.Run(async context =>
     await context.Response.WriteAsJsonAsync(new { error = message });
 }));
 
-// Apply migrations on startup (Postgres may still be booting → retry).
+// Apply migrations on startup (Postgres may still be booting → retry) and seed.
 await ApplyMigrationsAsync(app);
 
+app.MapAuthEndpoints();
 app.MapPaintingEndpoints();
 
 app.MapGet("/health", () => Results.Ok(new { status = "ok" }));
@@ -75,6 +106,7 @@ static async Task ApplyMigrationsAsync(WebApplication app)
         {
             await db.Database.MigrateAsync();
             logger.LogInformation("Database migrations applied.");
+            await ColorDictionarySeeder.SeedAsync(db, app.Environment.ContentRootPath, logger);
             return;
         }
         catch (Exception ex)
