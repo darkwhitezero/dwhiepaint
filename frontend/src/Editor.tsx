@@ -108,7 +108,11 @@ export function Editor({ onSaved }: { onSaved: () => void }) {
         </button>
       </div>
 
-      {error && <p className="error">Ошибка: {error}</p>}
+      {error && (
+        <p className="error" role="alert">
+          Ошибка: {error}
+        </p>
+      )}
 
       {imageId && (
         <div className="workspace">

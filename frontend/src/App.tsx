@@ -40,7 +40,7 @@ function App() {
     <main className="app">
       <header className="header">
         <div>
-          <h1>dwhiepaint</h1>
+          <h1 className="wordmark">dwhiepaint</h1>
           <p className="subtitle">Фото → раскраска по номерам</p>
         </div>
         <div className="header-right">

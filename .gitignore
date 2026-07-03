@@ -20,3 +20,6 @@ cv-service/**/__pycache__/
 .DS_Store
 .vs/
 .idea/
+
+# Local Claude preview/dev config
+.claude/

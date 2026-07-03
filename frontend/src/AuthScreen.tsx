@@ -25,7 +25,7 @@ export function AuthScreen({ onAuth }: { onAuth: (token: string, email: string) 
 
   return (
     <div className="auth">
-      <h1>dwhiepaint</h1>
+      <h1 className="wordmark">dwhiepaint</h1>
       <p className="subtitle">Фото → раскраска по номерам</p>
 
       <form className="auth-card" onSubmit={submit}>
@@ -68,7 +68,11 @@ export function AuthScreen({ onAuth }: { onAuth: (token: string, email: string) 
           />
         </label>
 
-        {error && <p className="error">{error}</p>}
+        {error && (
+          <p className="error" role="alert">
+            {error}
+          </p>
+        )}
 
         <button className="primary" type="submit" disabled={busy}>
           {busy ? '…' : mode === 'login' ? 'Войти' : 'Создать аккаунт'}
