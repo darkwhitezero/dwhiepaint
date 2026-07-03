@@ -21,6 +21,7 @@ class SegmentRequest(BaseModel):
 class ExportRequest(BaseModel):
     image_id: str
     page_size: str = "A4"
+    include_legend: bool = True
 
 
 class PaletteColor(BaseModel):
@@ -72,5 +73,5 @@ def export(req: ExportRequest):
     if entry.segmentation is None:
         raise HTTPException(status_code=409, detail="segment the image before export")
 
-    png = export_mod.compose_export(entry, req.page_size)
-    return Response(content=png, media_type="image/png")
+    pdf = export_mod.compose_export(entry, req.page_size, req.include_legend)
+    return Response(content=pdf, media_type="application/pdf")

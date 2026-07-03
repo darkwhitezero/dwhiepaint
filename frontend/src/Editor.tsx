@@ -22,6 +22,7 @@ export function Editor({ onSaved }: { onSaved: () => void }) {
   const [busy, setBusy] = useState<'idle' | 'analyzing' | 'segmenting' | 'exporting'>('idle')
   const [error, setError] = useState<string | null>(null)
   const [pageSize, setPageSize] = useState('A4')
+  const [includeLegend, setIncludeLegend] = useState(true)
 
   const didInitialSegment = useRef(false)
 
@@ -71,8 +72,8 @@ export function Editor({ onSaved }: { onSaved: () => void }) {
     setBusy('exporting')
     setError(null)
     try {
-      const blob = await exportBlob(imageId, pageSize)
-      triggerDownload(blob, `dwhiepaint-${pageSize}.png`)
+      const blob = await exportBlob(imageId, pageSize, includeLegend)
+      triggerDownload(blob, `dwhiepaint-${pageSize}.pdf`)
       onSaved()
     } catch (e) {
       setError(String(e instanceof Error ? e.message : e))
@@ -126,12 +127,20 @@ export function Editor({ onSaved }: { onSaved: () => void }) {
               />
             </label>
             <div className="export">
+              <label className="checkbox">
+                <input
+                  type="checkbox"
+                  checked={includeLegend}
+                  onChange={(e) => setIncludeLegend(e.target.checked)}
+                />
+                Лист с легендой
+              </label>
               <select value={pageSize} onChange={(e) => setPageSize(e.target.value)}>
                 <option value="A4">A4</option>
                 <option value="A3">A3</option>
               </select>
               <button className="primary" onClick={onExport} disabled={!seg || busy !== 'idle'}>
-                {busy === 'exporting' ? 'Готовим…' : 'Скачать PNG'}
+                {busy === 'exporting' ? 'Готовим…' : 'Скачать PDF'}
               </button>
             </div>
           </div>

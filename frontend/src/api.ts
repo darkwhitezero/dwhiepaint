@@ -115,8 +115,13 @@ async function fetchBlob(url: string): Promise<Blob> {
   return res.blob()
 }
 
-export async function exportBlob(imageId: string, pageSize: string): Promise<Blob> {
-  return fetchBlob(`${API_BASE_URL}/api/paintings/${imageId}/export?pageSize=${pageSize}`)
+export async function exportBlob(
+  imageId: string,
+  pageSize: string,
+  includeLegend: boolean,
+): Promise<Blob> {
+  const q = new URLSearchParams({ pageSize, includeLegend: String(includeLegend) })
+  return fetchBlob(`${API_BASE_URL}/api/paintings/${imageId}/export?${q}`)
 }
 export async function resultBlob(imageId: string): Promise<Blob> {
   return fetchBlob(`${API_BASE_URL}/api/paintings/${imageId}/result`)

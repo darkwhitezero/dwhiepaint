@@ -32,13 +32,21 @@ public class CvClient(HttpClient http)
         return await ReadJsonAsync(resp, ct);
     }
 
-    public async Task<byte[]> ExportAsync(string imageId, string pageSize, CancellationToken ct)
+    public async Task<(byte[] Bytes, string ContentType)> ExportAsync(
+        string imageId, string pageSize, bool includeLegend, CancellationToken ct)
     {
-        var payload = JsonSerializer.Serialize(new { image_id = imageId, page_size = pageSize });
+        var payload = JsonSerializer.Serialize(new
+        {
+            image_id = imageId,
+            page_size = pageSize,
+            include_legend = includeLegend,
+        });
         using var content = new StringContent(payload, Encoding.UTF8, "application/json");
         using var resp = await http.PostAsync("/export", content, ct);
         await EnsureOkAsync(resp, ct);
-        return await resp.Content.ReadAsByteArrayAsync(ct);
+        var bytes = await resp.Content.ReadAsByteArrayAsync(ct);
+        var type = resp.Content.Headers.ContentType?.ToString() ?? "application/pdf";
+        return (bytes, type);
     }
 
     public async Task<(byte[] Bytes, string ContentType)> GetCacheFileAsync(

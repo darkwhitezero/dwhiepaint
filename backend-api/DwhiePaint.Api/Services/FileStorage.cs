@@ -20,9 +20,9 @@ public class FileStorage
         return path;
     }
 
-    public async Task<string> SaveResultAsync(Guid imageId, string pageSize, byte[] bytes, CancellationToken ct)
+    public async Task<string> SaveResultAsync(Guid imageId, byte[] bytes, string ext, CancellationToken ct)
     {
-        var path = Path.Combine(_root, $"{imageId}-{pageSize}.png");
+        var path = Path.Combine(_root, $"{imageId}-result{ext}");
         await File.WriteAllBytesAsync(path, bytes, ct);
         return path;
     }
@@ -33,6 +33,14 @@ public class FileStorage
         ".jpg" or ".jpeg" => "image/jpeg",
         ".webp" => "image/webp",
         ".gif" => "image/gif",
+        ".pdf" => "application/pdf",
         _ => "application/octet-stream",
+    };
+
+    public static string ExtForContentType(string contentType) => contentType switch
+    {
+        "application/pdf" => ".pdf",
+        "image/png" => ".png",
+        _ => ".bin",
     };
 }

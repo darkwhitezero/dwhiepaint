@@ -286,6 +286,15 @@ a.primary {
   font-size: 1rem;
 }
 
+.checkbox {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.9rem;
+  color: #444;
+  white-space: nowrap;
+}
+
 .result {
   display: grid;
   grid-template-columns: 1fr 1fr;

@@ -1,9 +1,9 @@
-"""/export pipeline: compose a printable page (line art + numbered legend).
+"""/export pipeline: compose printable page(s) as a PDF.
 
-Layout adapts to the image orientation so the artwork uses as much of the sheet
-as possible: for landscape images the legend sits in a right-hand column, for
-portrait images it sits in a bottom band. The line art is re-rendered at the
-target print resolution (not upscaled) for crisp outlines and numbers.
+Page 1 is the clean coloring sheet (line art + numbers only). Page 2 is an
+optional legend sheet: the mapping from each number to the closest named color
+(swatch + Russian name + hex). Line art is re-rendered at the target print
+resolution for crisp outlines and numbers.
 """
 
 from __future__ import annotations
@@ -20,9 +20,10 @@ from .cache import ImageEntry, PaletteEntry
 
 Rect = tuple[int, int, int, int]  # x, y, w, h
 
-# Minimum legend column width (px @300dpi) so Russian names fit without truncation.
-LEGEND_MIN_COL_W = 820
+# Minimum legend column width (px @300dpi) so long Russian names fit without truncation.
+LEGEND_MIN_COL_W = 1000
 LEGEND_MAX_ROW_H = 150
+DPI = 300
 
 
 def _load_font(path: str, size: int) -> ImageFont.FreeTypeFont:
@@ -45,7 +46,9 @@ def _fit_text(font: ImageFont.FreeTypeFont, text: str, max_w: float) -> str:
     return text + "…"
 
 
-def compose_export(entry: ImageEntry, page_size: str = "A4") -> bytes:
+def compose_export(entry: ImageEntry, page_size: str = "A4",
+                   include_legend: bool = True) -> bytes:
+    """Return a PDF: coloring sheet, plus an optional legend sheet."""
     seg = entry.segmentation
     if seg is None:
         raise ValueError("image has not been segmented yet")
@@ -53,42 +56,55 @@ def compose_export(entry: ImageEntry, page_size: str = "A4") -> bytes:
     src_h, src_w = seg.label_img.shape
     landscape = src_w > src_h
     page_w, page_h = _page_dimensions(page_size, landscape)
+
+    pages = [_coloring_page(seg, page_w, page_h)]
+    if include_legend:
+        pages.append(_legend_page(seg.palette, page_w, page_h))
+
+    buf = io.BytesIO()
+    pages[0].save(
+        buf, format="PDF", resolution=float(DPI),
+        save_all=True, append_images=pages[1:],
+    )
+    return buf.getvalue()
+
+
+def _coloring_page(seg, page_w: int, page_h: int) -> Image.Image:
     min_dim = min(page_w, page_h)
-    margin = round(min_dim * 0.045)
-    gap = margin
+    margin = round(min_dim * 0.04)
 
     page = Image.new("RGB", (page_w, page_h), "white")
     draw = ImageDraw.Draw(page)
 
-    # Title
-    title_size = round(min_dim * 0.028)
-    title_font = _load_font(config.FONT_PATH_BOLD, title_size)
-    draw.text((margin, margin), "dwhiepaint — раскраска по номерам",
-              fill="black", font=title_font)
-    title_h = title_size + round(margin * 0.6)
+    title_size = round(min_dim * 0.022)
+    title_font = _load_font(config.FONT_PATH, title_size)
+    draw.text((margin, round(margin * 0.5)), "dwhiepaint — раскраска по номерам",
+              fill=(120, 120, 120), font=title_font)
 
-    content_x, content_y = margin, margin + title_h
-    content_w = page_w - 2 * margin
-    content_h = page_h - content_y - margin
-
-    n = len(seg.palette)
-    if landscape:
-        legend_w = round(content_w * 0.30)
-        art_rect: Rect = (content_x, content_y, content_w - legend_w - gap, content_h)
-        legend_rect: Rect = (content_x + content_w - legend_w, content_y, legend_w, content_h)
-    else:
-        cols = max(1, min(n, content_w // LEGEND_MIN_COL_W))
-        rows = math.ceil(n / cols)
-        legend_h = min(rows * 130, round(content_h * 0.42))
-        art_rect = (content_x, content_y, content_w, content_h - legend_h - gap)
-        legend_rect = (content_x, content_y + content_h - legend_h, content_w, legend_h)
-
+    top = margin + title_size + round(margin * 0.4)
+    art_rect: Rect = (margin, top, page_w - 2 * margin, page_h - top - margin)
     _paste_artwork(page, draw, seg, art_rect)
-    _draw_legend(draw, seg.palette, legend_rect)
+    return page
 
-    buf = io.BytesIO()
-    page.save(buf, format="PNG")
-    return buf.getvalue()
+
+def _legend_page(palette: list[PaletteEntry], page_w: int, page_h: int) -> Image.Image:
+    min_dim = min(page_w, page_h)
+    margin = round(min_dim * 0.045)
+
+    page = Image.new("RGB", (page_w, page_h), "white")
+    draw = ImageDraw.Draw(page)
+
+    title_font = _load_font(config.FONT_PATH_BOLD, round(min_dim * 0.028))
+    sub_font = _load_font(config.FONT_PATH, round(min_dim * 0.017))
+    draw.text((margin, margin), "Цвета", fill="black", font=title_font)
+    sub_y = margin + round(min_dim * 0.028) + round(margin * 0.2)
+    draw.text((margin, sub_y), "Номер → ближайший цвет краски",
+              fill=(120, 120, 120), font=sub_font)
+
+    top = sub_y + round(min_dim * 0.017) + margin
+    legend_rect: Rect = (margin, top, page_w - 2 * margin, page_h - top - margin)
+    _draw_legend(draw, palette, legend_rect)
+    return page
 
 
 def _paste_artwork(page: Image.Image, draw: ImageDraw.ImageDraw,
@@ -118,8 +134,9 @@ def _draw_legend(draw: ImageDraw.ImageDraw, palette: list[PaletteEntry],
     row_h = min(lh / rows, LEGEND_MAX_ROW_H)
     col_w = lw / cols
 
-    swatch = max(20, int(min(row_h * 0.55, 60)))
-    font = _load_font(config.FONT_PATH, int(swatch * 0.62))
+    swatch = max(24, int(min(row_h * 0.6, 72)))
+    font = _load_font(config.FONT_PATH, int(swatch * 0.5))
+    hex_font = _load_font(config.FONT_PATH, int(swatch * 0.36))
     pad = int(swatch * 0.45)
 
     for i, c in enumerate(palette):
@@ -131,7 +148,8 @@ def _draw_legend(draw: ImageDraw.ImageDraw, palette: list[PaletteEntry],
         rgb = tuple(int(c.hex[j:j + 2], 16) for j in (1, 3, 5))
         draw.rectangle([x, sy, x + swatch, sy + swatch], fill=rgb, outline="black", width=2)
 
-        # Swatch already conveys the color, so the label is just number + name.
-        label = _fit_text(font, f"{c.index}. {c.name_ru}", col_w - swatch - pad * 2)
-        draw.text((x + swatch + pad, y + (row_h - font.size) / 2),
-                  label, fill="black", font=font)
+        text_x = x + swatch + pad
+        max_w = col_w - swatch - pad * 2
+        name = _fit_text(font, f"{c.index}. {c.name_ru}", max_w)
+        draw.text((text_x, sy), name, fill="black", font=font)
+        draw.text((text_x, sy + swatch * 0.55), c.hex, fill=(130, 130, 130), font=hex_font)

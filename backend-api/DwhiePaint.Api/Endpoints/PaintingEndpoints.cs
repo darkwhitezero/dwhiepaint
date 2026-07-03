@@ -110,17 +110,19 @@ public static class PaintingEndpoints
 
     private static async Task<IResult> ExportPainting(
         Guid id, ClaimsPrincipal principal, CvClient cv, AppDbContext db,
-        FileStorage storage, CancellationToken ct, string pageSize = "A4")
+        FileStorage storage, CancellationToken ct,
+        string pageSize = "A4", bool includeLegend = true)
     {
         var painting = await OwnedPainting(db, id, principal.GetUserId(), ct);
         if (painting is null) return Results.NotFound();
 
-        var png = await cv.ExportAsync(id.ToString(), pageSize, ct);
-        painting.ResultPath = await storage.SaveResultAsync(id, pageSize, png, ct);
+        var (bytes, contentType) = await cv.ExportAsync(id.ToString(), pageSize, includeLegend, ct);
+        var ext = FileStorage.ExtForContentType(contentType);
+        painting.ResultPath = await storage.SaveResultAsync(id, bytes, ext, ct);
         painting.Status = PaintingStatus.Done;
         await db.SaveChangesAsync(ct);
 
-        return Results.File(png, "image/png", $"dwhiepaint-{id}.png");
+        return Results.File(bytes, contentType, $"dwhiepaint-{id}{ext}");
     }
 
     private static async Task<IResult> DownloadResult(
@@ -131,7 +133,9 @@ public static class PaintingEndpoints
             return Results.NotFound();
 
         var bytes = await File.ReadAllBytesAsync(painting.ResultPath, ct);
-        return Results.File(bytes, "image/png", $"dwhiepaint-{id}.png");
+        var contentType = FileStorage.GuessContentType(painting.ResultPath);
+        var ext = Path.GetExtension(painting.ResultPath);
+        return Results.File(bytes, contentType, $"dwhiepaint-{id}{ext}");
     }
 
     private static async Task<IResult> ListPaintings(

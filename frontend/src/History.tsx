@@ -25,7 +25,7 @@ export function History({ reloadSignal }: { reloadSignal: number }) {
 
   async function download(id: string) {
     try {
-      triggerDownload(await resultBlob(id), `dwhiepaint-${id}.png`)
+      triggerDownload(await resultBlob(id), `dwhiepaint-${id}.pdf`)
     } catch (e) {
       setError(String(e instanceof Error ? e.message : e))
     }
