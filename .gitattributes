@@ -1,0 +1,5 @@
+# Normalize line endings; scripts that must stay LF for Linux containers.
+* text=auto eol=lf
+*.png binary
+*.jpg binary
+*.svg text

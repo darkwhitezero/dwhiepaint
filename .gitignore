@@ -1,0 +1,22 @@
+# Env
+.env
+
+# .NET
+**/bin/
+**/obj/
+*.user
+
+# Node
+node_modules/
+frontend/dist/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+cv-service/**/__pycache__/
+
+# OS / editors
+.DS_Store
+.vs/
+.idea/
