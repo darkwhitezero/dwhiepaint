@@ -1,5 +1,5 @@
 .app {
-  max-width: 720px;
+  max-width: 960px;
   margin: 0 auto;
   padding: 2rem 1rem;
   font-family: system-ui, sans-serif;
@@ -81,7 +81,136 @@
   cursor: pointer;
 }
 
-.primary:disabled {
+.primary:disabled,
+.primary[aria-disabled='true'] {
   background: #b9c7e8;
   cursor: not-allowed;
+  pointer-events: none;
+}
+
+a.primary {
+  text-decoration: none;
+  display: inline-block;
+}
+
+.error {
+  color: #b3261e;
+  background: #fbe5e5;
+  padding: 0.6rem 1rem;
+  border-radius: 8px;
+  margin-top: 1rem;
+}
+
+.workspace {
+  margin-top: 2rem;
+}
+
+.controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.5rem;
+  align-items: flex-end;
+  justify-content: space-between;
+  margin-bottom: 1.5rem;
+}
+
+.slider {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  flex: 1 1 320px;
+}
+
+.slider input[type='range'] {
+  width: 100%;
+}
+
+.slider em {
+  color: #888;
+  font-style: normal;
+}
+
+.export {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.export select {
+  padding: 0.55rem 0.6rem;
+  border-radius: 8px;
+  border: 1px solid #c9c9c9;
+  font-size: 1rem;
+}
+
+.result {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+}
+
+.result figure {
+  margin: 0;
+}
+
+.result figcaption {
+  font-size: 0.85rem;
+  color: #666;
+  margin-bottom: 0.4rem;
+}
+
+.result img {
+  width: 100%;
+  border: 1px solid #eee;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.placeholder {
+  aspect-ratio: 1;
+  border: 1px dashed #ddd;
+  border-radius: 8px;
+  display: grid;
+  place-items: center;
+  color: #bbb;
+}
+
+.legend {
+  list-style: none;
+  padding: 0;
+  margin: 1.5rem 0 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 0.5rem;
+}
+
+.legend li {
+  display: grid;
+  grid-template-columns: 20px 24px 1fr auto;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.9rem;
+}
+
+.legend .swatch {
+  width: 18px;
+  height: 18px;
+  border-radius: 4px;
+  border: 1px solid #0002;
+}
+
+.legend .num {
+  font-weight: 700;
+  text-align: right;
+}
+
+.legend .hex {
+  color: #999;
+  font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 640px) {
+  .result {
+    grid-template-columns: 1fr;
+  }
 }

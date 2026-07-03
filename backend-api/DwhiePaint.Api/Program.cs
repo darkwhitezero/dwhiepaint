@@ -1,4 +1,7 @@
 using DwhiePaint.Api.Data;
+using DwhiePaint.Api.Endpoints;
+using DwhiePaint.Api.Services;
+using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -8,6 +11,13 @@ builder.Services.AddOpenApi();
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("Default"))
            .UseSnakeCaseNamingConvention());
+
+builder.Services.AddHttpClient<CvClient>(client =>
+{
+    var baseUrl = builder.Configuration["CvService:BaseUrl"] ?? "http://localhost:8001";
+    client.BaseAddress = new Uri(baseUrl);
+    client.Timeout = TimeSpan.FromSeconds(120);
+});
 
 builder.Services.AddCors(options =>
     options.AddDefaultPolicy(policy =>
@@ -24,8 +34,23 @@ if (app.Environment.IsDevelopment())
 
 app.UseCors();
 
+// Translate CV service failures into meaningful HTTP responses.
+app.UseExceptionHandler(errApp => errApp.Run(async context =>
+{
+    var error = context.Features.Get<IExceptionHandlerFeature>()?.Error;
+    var (status, message) = error switch
+    {
+        CvServiceException cv => ((int?)cv.Status ?? StatusCodes.Status502BadGateway, cv.Message),
+        _ => (StatusCodes.Status500InternalServerError, "internal error"),
+    };
+    context.Response.StatusCode = status;
+    await context.Response.WriteAsJsonAsync(new { error = message });
+}));
+
 // Apply migrations on startup (Postgres may still be booting → retry).
 await ApplyMigrationsAsync(app);
+
+app.MapPaintingEndpoints();
 
 app.MapGet("/health", () => Results.Ok(new { status = "ok" }));
 

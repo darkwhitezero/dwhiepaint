@@ -1,8 +1,9 @@
 FROM python:3.12-slim
 
-# opencv-python-headless still needs libGL-free glib bits
+# opencv-python-headless needs glib; fonts-dejavu gives Cyrillic glyphs for the legend
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libglib2.0-0 \
+    fonts-dejavu-core \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
