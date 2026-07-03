@@ -23,3 +23,8 @@ cv-service/**/__pycache__/
 
 # Local Claude preview/dev config
 .claude/
+
+# Local working/test material (not project data — the seeded copy lives
+# in backend-api/DwhiePaint.Api/Data/colors.json)
+/colors.json
+/test_image/
