@@ -40,6 +40,7 @@ public class AppDbContext : DbContext
             e.Property(x => x.Id).HasDefaultValueSql("gen_random_uuid()");
             e.Property(x => x.Status).HasDefaultValue(PaintingStatus.Pending);
             e.Property(x => x.CreatedAt).HasDefaultValueSql("now()");
+            e.HasIndex(x => x.ShareToken).IsUnique();
             e.HasOne(x => x.Image)
                 .WithMany(i => i.Paintings)
                 .HasForeignKey(x => x.ImageId)

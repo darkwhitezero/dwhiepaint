@@ -17,6 +17,11 @@ public class Painting
     public string? ResultPath { get; set; }
     public DateTimeOffset CreatedAt { get; set; }
 
+    // Set when the owner shares this painting; a separate opaque value from
+    // Id so a share link can't be guessed from a painting's own URL, and can
+    // be revoked (set back to null) without touching the painting itself.
+    public Guid? ShareToken { get; set; }
+
     public Image? Image { get; set; }
     public ICollection<PaletteColor> PaletteColors { get; set; } = new List<PaletteColor>();
 }

@@ -27,10 +27,20 @@ public static class PaintingEndpoints
         group.MapPatch("/{id:guid}/colors", SetColors);
         group.MapGet("/{id:guid}/export", ExportPainting);
         group.MapGet("/{id:guid}/result", DownloadResult);
+        group.MapPost("/{id:guid}/share", CreateShareLink);
+        group.MapDelete("/{id:guid}/share", RevokeShareLink);
 
         // Anonymous image bytes (opaque UUID).
         app.MapGet("/api/paintings/{id:guid}/original", GetOriginal);
         app.MapGet("/api/cv-cache/{id:guid}/{file}", GetCvCache);
+
+        // Anonymous read-only access via a separate, revocable share token
+        // (never the painting's own id, so a share link can't be guessed).
+        // Serves the already-exported result, not a fresh cv-service render,
+        // so a share link keeps working long after the cv-service's
+        // in-memory session cache (~30 min TTL) has expired.
+        app.MapGet("/api/shared/{token:guid}", GetShared);
+        app.MapGet("/api/shared/{token:guid}/result", GetSharedResult);
 
         return app;
     }
@@ -134,6 +144,18 @@ public static class PaintingEndpoints
         Guid id, ClaimsPrincipal principal, AppDbContext db, CancellationToken ct)
     {
         var painting = await OwnedPainting(db, id, principal.GetUserId(), ct);
+        return await ResultFile(painting, id, ct);
+    }
+
+    private static async Task<IResult> GetSharedResult(Guid token, AppDbContext db, CancellationToken ct)
+    {
+        var painting = await db.Paintings.FirstOrDefaultAsync(p => p.ShareToken == token, ct);
+        return await ResultFile(painting, painting?.ImageId ?? Guid.Empty, ct);
+    }
+
+    /// <summary>Shared by the owner's and the share-link's result-download routes.</summary>
+    private static async Task<IResult> ResultFile(Painting? painting, Guid id, CancellationToken ct)
+    {
         if (painting?.ResultPath is null || !File.Exists(painting.ResultPath))
             return Results.NotFound();
 
@@ -160,6 +182,7 @@ public static class PaintingEndpoints
                 created_at = p.CreatedAt,
                 has_result = p.ResultPath != null,
                 original_url = $"/api/paintings/{p.ImageId}/original",
+                share_url = p.ShareToken == null ? null : "/s/" + p.ShareToken,
             }).ToListAsync(ct);
 
         return Results.Ok(items);
@@ -170,6 +193,58 @@ public static class PaintingEndpoints
     {
         var userId = principal.GetUserId();
         var painting = await OwnedPainting(db, id, userId, ct);
+        if (painting is null) return Results.NotFound();
+
+        var palette = await db.PaletteColors
+            .Where(c => c.PaintingId == painting.Id)
+            .OrderBy(c => c.ColorIndex)
+            .Select(c => new
+            {
+                index = c.ColorIndex, hex = c.Hex,
+                lab = new[] { c.LabL, c.LabA, c.LabB },
+                name_ru = c.NameRu, name_en = c.NameEn,
+            })
+            .ToListAsync(ct);
+
+        return Results.Ok(new
+        {
+            image_id = painting.ImageId,
+            color_count = painting.ColorCount,
+            status = painting.Status,
+            has_result = painting.ResultPath != null,
+            original_url = $"/api/paintings/{painting.ImageId}/original",
+            share_url = painting.ShareToken == null ? null : $"/s/{painting.ShareToken}",
+            palette,
+        });
+    }
+
+    private static async Task<IResult> CreateShareLink(
+        Guid id, ClaimsPrincipal principal, AppDbContext db, CancellationToken ct)
+    {
+        var painting = await OwnedPainting(db, id, principal.GetUserId(), ct);
+        if (painting is null) return Results.NotFound();
+
+        painting.ShareToken ??= Guid.NewGuid();
+        await db.SaveChangesAsync(ct);
+
+        return Results.Ok(new { share_url = $"/s/{painting.ShareToken}" });
+    }
+
+    private static async Task<IResult> RevokeShareLink(
+        Guid id, ClaimsPrincipal principal, AppDbContext db, CancellationToken ct)
+    {
+        var painting = await OwnedPainting(db, id, principal.GetUserId(), ct);
+        if (painting is null) return Results.NotFound();
+
+        painting.ShareToken = null;
+        await db.SaveChangesAsync(ct);
+
+        return Results.NoContent();
+    }
+
+    private static async Task<IResult> GetShared(Guid token, AppDbContext db, CancellationToken ct)
+    {
+        var painting = await db.Paintings.FirstOrDefaultAsync(p => p.ShareToken == token, ct);
         if (painting is null) return Results.NotFound();
 
         var palette = await db.PaletteColors
