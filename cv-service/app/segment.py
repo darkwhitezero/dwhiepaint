@@ -30,9 +30,11 @@ def segment(entry: ImageEntry, k: int) -> tuple[Segmentation, str]:
     if k <= 255:
         labels = cv2.medianBlur(labels.astype(np.uint8), 3).astype(np.int32)
 
-    region_id, region_cluster, areas = _connected_regions(labels, k)
+    region_id, region_cluster, areas = connected_regions(labels, k)
     min_area = max(16, int(config.MIN_REGION_AREA_FRAC * h * w))
-    cleaned = _merge_small_regions(region_id, region_cluster, areas, min_area)
+    cleaned = merge_small_regions(
+        region_id, region_cluster, areas, min_area, cluster_lab=km.cluster_centers_,
+    )
 
     idx_img, palette = _build_palette(cleaned, entry.rgb)
 
@@ -44,10 +46,14 @@ def segment(entry: ImageEntry, k: int) -> tuple[Segmentation, str]:
     return seg, region_map_url
 
 
-def _connected_regions(
+def connected_regions(
     labels: np.ndarray, k: int
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """Split each color cluster into 4-connected components with global ids."""
+    """Split each color cluster into 4-connected components with global ids.
+
+    Public (reused by ``analyze._auto_k`` to score candidate k's on an actual
+    mini-segmentation rather than color separation alone).
+    """
     h, w = labels.shape
     region_id = np.full((h, w), -1, dtype=np.int64)
     region_cluster: list[int] = []
@@ -87,13 +93,22 @@ def _adjacency(region_id: np.ndarray, num_regions: int) -> dict[int, dict[int, i
     return adj
 
 
-def _merge_small_regions(
+def merge_small_regions(
     region_id: np.ndarray,
     region_cluster: np.ndarray,
     areas: np.ndarray,
     min_area: int,
+    cluster_lab: np.ndarray | None = None,
 ) -> np.ndarray:
-    """Absorb every region below min_area into its largest-border neighbor.
+    """Absorb every region below min_area into a well-matched neighbor.
+
+    Public (reused by ``analyze._auto_k``). Picking "largest shared border"
+    alone can merge a sliver into a visually distant neighbor when two
+    borders are comparable in length (e.g. a thin hair strand between two
+    similarly-sized regions). When ``cluster_lab`` (per-cluster Lab
+    centroids, e.g. ``KMeans.cluster_centers_``) is given, the border score
+    is discounted by how far the neighbor's color is — among comparable
+    borders this prefers the perceptually closer-colored neighbor.
 
     Returns an HxW map of (merged) cluster labels.
     """
@@ -102,6 +117,12 @@ def _merge_small_regions(
     size = areas.tolist()
     cluster = region_cluster.tolist()
     adj = _adjacency(region_id, r)
+
+    def neighbor_score(reg: int, n: int, border: int) -> float:
+        if cluster_lab is None:
+            return float(border)
+        dist = float(np.linalg.norm(cluster_lab[cluster[reg]] - cluster_lab[cluster[n]]))
+        return border / (1.0 + dist)
 
     def find(x: int) -> int:
         root = x
@@ -124,7 +145,8 @@ def _merge_small_regions(
         if not neighbors:
             continue  # isolated region, nothing to merge into
 
-        nb = find(max(neighbors, key=neighbors.get))
+        best_n = max(neighbors, key=lambda n: neighbor_score(reg, n, neighbors[n]))
+        nb = find(best_n)
         if nb == reg:
             continue
 

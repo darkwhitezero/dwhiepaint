@@ -5,16 +5,37 @@ from __future__ import annotations
 import cv2
 import numpy as np
 
+from . import config
 from .cache import PaletteEntry
 
 
-def outline_mask(label_img: np.ndarray) -> np.ndarray:
-    """Boolean HxW mask that is True on borders between different labels."""
-    h_diff = np.zeros(label_img.shape, dtype=bool)
-    v_diff = np.zeros(label_img.shape, dtype=bool)
-    h_diff[:, :-1] = label_img[:, :-1] != label_img[:, 1:]
-    v_diff[:-1, :] = label_img[:-1, :] != label_img[1:, :]
-    return h_diff | v_diff
+def _draw_smoothed_outlines(canvas: np.ndarray, label_img: np.ndarray, thickness: int) -> None:
+    """Draw simplified per-label contours instead of a raw pixel-diff border.
+
+    A pixel-diff boundary renders every JPEG-noise staircase and antialiased
+    edge as a jagged line. Extracting each label's contour and simplifying it
+    with ``approxPolyDP`` smooths that noise into clean, printable curves
+    while keeping real corners intact.
+
+    Epsilon is the smaller of a perimeter-relative fraction and an absolute
+    pixel cap. The absolute cap matters on thin, elongated regions (a hair
+    strand, a thin merged sliver): perimeter is large relative to width there,
+    so the relative term alone can exceed the region's own width and make
+    approxPolyDP collapse its two sides into a self-intersecting polygon.
+    """
+    for lbl in np.unique(label_img):
+        mask = (label_img == lbl).astype(np.uint8)
+        contours, _ = cv2.findContours(mask, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
+        for contour in contours:
+            if len(contour) < 3:
+                continue
+            perimeter = cv2.arcLength(contour, True)
+            epsilon = min(config.CONTOUR_SIMPLIFY_EPS * perimeter, config.CONTOUR_SIMPLIFY_MAX_PX)
+            simplified = cv2.approxPolyDP(contour, epsilon, True)
+            cv2.polylines(
+                canvas, [simplified], isClosed=True, color=(0, 0, 0),
+                thickness=thickness, lineType=cv2.LINE_AA,
+            )
 
 
 def line_art(
@@ -25,15 +46,11 @@ def line_art(
     min_label_radius: float = 6.0,
     draw_numbers: bool = True,
 ) -> np.ndarray:
-    """Compose an RGB uint8 canvas: white background, black outlines + numbers."""
+    """Compose an RGB uint8 canvas: white background, smoothed black outlines + numbers."""
     h, w = label_img.shape
     canvas = np.full((h, w, 3), 255, dtype=np.uint8)
 
-    lines = outline_mask(label_img)
-    if thickness > 1:
-        kernel = np.ones((thickness, thickness), np.uint8)
-        lines = cv2.dilate(lines.astype(np.uint8), kernel).astype(bool)
-    canvas[lines] = (0, 0, 0)
+    _draw_smoothed_outlines(canvas, label_img, thickness)
 
     if draw_numbers:
         for entry in palette:

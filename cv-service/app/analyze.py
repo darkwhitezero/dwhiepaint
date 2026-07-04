@@ -5,13 +5,14 @@ from __future__ import annotations
 import io
 import uuid
 
+import cv2
 import numpy as np
 from PIL import Image, ImageOps
 from skimage.color import rgb2lab
 from sklearn.cluster import MiniBatchKMeans
 from sklearn.metrics import silhouette_score
 
-from . import config, storage
+from . import config, segment, storage
 from .cache import ImageEntry, cache
 
 
@@ -27,38 +28,97 @@ def _decode_and_resize(file_bytes: bytes) -> np.ndarray:
         scale = config.MAX_SIDE / longest
         img = img.resize((round(w * scale), round(h * scale)), Image.LANCZOS)
 
-    return np.asarray(img, dtype=np.uint8)
+    rgb = np.asarray(img, dtype=np.uint8)
+    # Edge-preserving smoothing: cuts JPEG compression speckle before color
+    # quantization, so clustering doesn't fragment on noise that isn't really
+    # part of the artwork (real thin decorative elements survive; noise doesn't).
+    return cv2.bilateralFilter(
+        rgb, config.DENOISE_D, config.DENOISE_SIGMA_COLOR, config.DENOISE_SIGMA_SPACE,
+    )
 
 
-def _auto_k(lab_pixels: np.ndarray) -> int:
-    """Pick the candidate k with the best silhouette score on a pixel sample."""
+def _downsample_lab(lab: np.ndarray, max_side: int) -> np.ndarray:
+    """Spatially shrink a Lab image for the (expensive) auto-k search only.
+
+    Used only within this module's candidate search — never fed back into
+    the cached full-resolution entry.
+    """
+    h, w = lab.shape[:2]
+    longest = max(h, w)
+    if longest <= max_side:
+        return lab.astype(np.float32)
+    scale = max_side / longest
+    new_w, new_h = max(1, round(w * scale)), max(1, round(h * scale))
+    return cv2.resize(lab.astype(np.float32), (new_w, new_h), interpolation=cv2.INTER_AREA)
+
+
+def _score_candidate(working_lab: np.ndarray, k: int) -> float | None:
+    """Composite score for one candidate k: color separation + how cleanly it
+    segments in practice (few post-merge regions, no single dominating blob).
+
+    Runs the same cluster → regions → merge path as a real ``/segment`` call,
+    on the small working copy, so k is picked by how the image actually
+    paints out rather than by color-cluster separation alone.
+    """
+    h, w = working_lab.shape[:2]
+    pixels = working_lab.reshape(-1, 3)
+
+    km = MiniBatchKMeans(n_clusters=k, random_state=42, n_init=3, batch_size=2048)
+    labels_flat = km.fit_predict(pixels)
+    if len(np.unique(labels_flat)) < 2:
+        return None
+
     rng = np.random.default_rng(42)
+    sil_idx = rng.choice(
+        pixels.shape[0], size=min(pixels.shape[0], config.AUTO_K_SIL_SAMPLE), replace=False,
+    )
+    try:
+        silhouette = silhouette_score(pixels[sil_idx], labels_flat[sil_idx])
+    except ValueError:
+        return None
 
-    n = lab_pixels.shape[0]
-    fit_idx = rng.choice(n, size=min(n, 20000), replace=False)
-    fit_sample = lab_pixels[fit_idx]
+    labels = labels_flat.astype(np.int32).reshape(h, w)
+    region_id, region_cluster, areas = segment.connected_regions(labels, k)
+    min_area = max(16, int(config.MIN_REGION_AREA_FRAC * h * w))
+    cleaned = segment.merge_small_regions(
+        region_id, region_cluster, areas, min_area, cluster_lab=km.cluster_centers_,
+    )
+    _, _, final_areas = segment.connected_regions(cleaned, k)
+    region_count = len(final_areas)
+    dominant_frac = float(final_areas.max()) / (h * w) if region_count else 1.0
 
-    # Silhouette is O(m^2); score on a smaller subsample.
-    sil_idx = rng.choice(fit_sample.shape[0], size=min(fit_sample.shape[0], 2000), replace=False)
-    sil_sample = fit_sample[sil_idx]
+    frag_penalty = max(0.0, region_count - config.AUTO_K_TARGET_REGIONS) / config.AUTO_K_TARGET_REGIONS
+    dom_penalty = (
+        max(0.0, dominant_frac - config.AUTO_K_DOMINANCE_THRESHOLD)
+        / (1 - config.AUTO_K_DOMINANCE_THRESHOLD)
+    )
 
-    best_k, best_score = config.CANDIDATE_KS[0], -1.0
-    for k in config.CANDIDATE_KS:
-        if k >= sil_sample.shape[0]:
+    return (
+        config.AUTO_K_W_SILHOUETTE * silhouette
+        - config.AUTO_K_W_FRAGMENTATION * frag_penalty
+        - config.AUTO_K_W_DOMINANCE * dom_penalty
+    )
+
+
+def _auto_k(lab: np.ndarray) -> int:
+    """Pick the candidate k whose actual mini-segmentation scores best.
+
+    More expensive than a pure color-silhouette scan (clusters + extracts
+    regions + merges small ones for every candidate), but the result tracks
+    what the user will actually see printed, not just cluster separability.
+    """
+    working_lab = _downsample_lab(lab, config.AUTO_K_WORKING_MAX_SIDE)
+    total_px = working_lab.shape[0] * working_lab.shape[1]
+
+    best_k, best_score = config.AUTO_K_CANDIDATES[0], float("-inf")
+    for k in config.AUTO_K_CANDIDATES:
+        if k >= total_px:
             continue
-        km = MiniBatchKMeans(n_clusters=k, random_state=42, n_init=3, batch_size=2048)
-        km.fit(fit_sample)
-        labels = km.predict(sil_sample)
-        if len(np.unique(labels)) < 2:
-            continue
-        try:
-            score = silhouette_score(sil_sample, labels)
-        except ValueError:
-            continue
-        if score > best_score:
+        score = _score_candidate(working_lab, k)
+        if score is not None and score > best_score:
             best_k, best_score = k, score
 
-    return best_k
+    return int(np.clip(best_k, config.MIN_K, config.MAX_K))
 
 
 def analyze(file_bytes: bytes) -> dict:
@@ -68,9 +128,8 @@ def analyze(file_bytes: bytes) -> dict:
     """
     rgb = _decode_and_resize(file_bytes)
     lab = rgb2lab(rgb.astype(np.float64) / 255.0)
-    lab_pixels = lab.reshape(-1, 3)
 
-    predicted_k = _auto_k(lab_pixels)
+    predicted_k = _auto_k(lab)
 
     image_id = str(uuid.uuid4())
     entry = ImageEntry(image_id=image_id, rgb=rgb, lab=lab)
