@@ -24,7 +24,8 @@ public static class PaintingEndpoints
         group.MapPost("", CreatePainting).DisableAntiforgery();
         group.MapGet("", ListPaintings);
         group.MapGet("/{id:guid}", GetPainting);
-        group.MapPatch("/{id:guid}/colors", SetColors);
+        group.MapPost("/{id:guid}/segment", StartSegment);
+        group.MapGet("/{id:guid}/segment", SegmentStatus);
         group.MapGet("/{id:guid}/export", ExportPainting);
         group.MapGet("/{id:guid}/result", DownloadResult);
         group.MapPost("/{id:guid}/share", CreateShareLink);
@@ -80,7 +81,7 @@ public static class PaintingEndpoints
         db.Paintings.Add(new Painting
         {
             Id = imageId, ImageId = imageId, ColorCount = predictedK,
-            Status = PaintingStatus.Processing,
+            Status = PaintingStatus.Pending,
         });
         await db.SaveChangesAsync(ct);
 
@@ -88,40 +89,90 @@ public static class PaintingEndpoints
         return Results.Json(result);
     }
 
-    private static async Task<IResult> SetColors(
+    /// <summary>Enqueue an async segmentation job for the given color count.</summary>
+    private static async Task<IResult> StartSegment(
         Guid id, ColorsRequest body, ClaimsPrincipal principal,
         CvClient cv, AppDbContext db, CancellationToken ct)
     {
         var painting = await OwnedPainting(db, id, principal.GetUserId(), ct);
         if (painting is null) return Results.NotFound();
 
-        var result = await cv.SegmentAsync(id.ToString(), body.K, ct);
+        var jobId = await cv.EnqueueSegmentAsync(id.ToString(), body.K, ct);
+        painting.JobId = jobId;
+        painting.Status = PaintingStatus.Processing;
+        await db.SaveChangesAsync(ct);
 
-        var existing = db.PaletteColors.Where(p => p.PaintingId == painting.Id);
-        db.PaletteColors.RemoveRange(existing);
+        return Results.Json(new { job_id = jobId });
+    }
 
-        foreach (var node in result["palette"]!.AsArray())
+    /// <summary>
+    /// Poll the in-flight segmentation job. Returns live stage/progress while
+    /// running; on completion it idempotently persists the palette (so History
+    /// and export have it) and returns the full result. The persist side effect
+    /// is guarded on <see cref="PaintingStatus.Processing"/>, so repeated polls
+    /// after completion are read-only.
+    /// </summary>
+    private static async Task<IResult> SegmentStatus(
+        Guid id, ClaimsPrincipal principal, CvClient cv, AppDbContext db, CancellationToken ct)
+    {
+        var painting = await OwnedPainting(db, id, principal.GetUserId(), ct);
+        if (painting is null) return Results.NotFound();
+        if (painting.JobId is null) return Results.Json(new { status = "idle" });
+
+        var status = await cv.GetJobStatusAsync(painting.JobId, ct);
+        if (status is null)
         {
-            var lab = node!["lab"]!.AsArray();
-            db.PaletteColors.Add(new PaletteColor
-            {
-                PaintingId = painting.Id,
-                ColorIndex = node["index"]!.GetValue<int>(),
-                Hex = node["hex"]!.GetValue<string>(),
-                LabL = (float)lab[0]!.GetValue<double>(),
-                LabA = (float)lab[1]!.GetValue<double>(),
-                LabB = (float)lab[2]!.GetValue<double>(),
-                NameRu = node["name_ru"]!.GetValue<string>(),
-                NameEn = node["name_en"]?.GetValue<string?>(),
-            });
+            // Job state has aged out of Redis. If we already persisted the
+            // palette it's effectively complete; otherwise it's unrecoverable.
+            var settled = painting.Status is PaintingStatus.Ready or PaintingStatus.Done;
+            return Results.Json(new { status = settled ? "complete" : "expired" });
         }
 
-        painting.ColorCount = result["k"]!.GetValue<int>();
-        await db.SaveChangesAsync(ct);
+        var state = status["status"]?.GetValue<string>() ?? "queued";
+
+        if (state == "failed")
+        {
+            if (painting.Status != PaintingStatus.Failed)
+            {
+                painting.Status = PaintingStatus.Failed;
+                await db.SaveChangesAsync(ct);
+            }
+            return Results.Json(status);
+        }
+
+        if (state != "complete")
+            return Results.Json(status); // queued / processing — carries stage + progress
+
+        var result = await cv.GetJobResultAsync(painting.JobId, ct);
+
+        if (painting.Status == PaintingStatus.Processing)
+        {
+            var existing = db.PaletteColors.Where(p => p.PaintingId == painting.Id);
+            db.PaletteColors.RemoveRange(existing);
+            foreach (var node in result["palette"]!.AsArray())
+            {
+                var lab = node!["lab"]!.AsArray();
+                db.PaletteColors.Add(new PaletteColor
+                {
+                    PaintingId = painting.Id,
+                    ColorIndex = node["index"]!.GetValue<int>(),
+                    Hex = node["hex"]!.GetValue<string>(),
+                    LabL = (float)lab[0]!.GetValue<double>(),
+                    LabA = (float)lab[1]!.GetValue<double>(),
+                    LabB = (float)lab[2]!.GetValue<double>(),
+                    NameRu = node["name_ru"]!.GetValue<string>(),
+                    NameEn = node["name_en"]?.GetValue<string?>(),
+                });
+            }
+            painting.ColorCount = result["k"]!.GetValue<int>();
+            painting.Status = PaintingStatus.Ready;
+            await db.SaveChangesAsync(ct);
+        }
 
         RewriteCacheUrl(result, "region_map_url");
         RewriteCacheUrl(result, "painted_preview_url");
         RewriteCacheUrl(result, "svg_url");
+        result["status"] = "complete";
         return Results.Json(result);
     }
 

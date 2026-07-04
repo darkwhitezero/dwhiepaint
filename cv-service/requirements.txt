@@ -9,3 +9,5 @@ scikit-learn==1.5.2
 shapely==2.0.6
 svgwrite==1.4.3
 cairosvg==2.7.1
+arq==0.26.3
+redis==5.2.1

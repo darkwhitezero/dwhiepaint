@@ -2,21 +2,31 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   assetUrl,
   exportBlob,
-  segment,
+  getSegmentStatus,
+  startSegment,
   triggerDownload,
   uploadImage,
   validateImageFile,
   type ExportFormat,
   type SegmentResult,
+  type SegmentStage,
 } from './api'
 import { Legend } from './Legend'
+import { ProgressBar } from './ProgressBar'
 import { SegmentedControl } from './SegmentedControl'
 import { useToast } from './Toast'
 
 const MIN_K = 4
 const MAX_K = 32
+const POLL_INTERVAL_MS = 700
 
 const msg = (e: unknown) => String(e instanceof Error ? e.message : e)
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
+
+interface Progress {
+  stage: SegmentStage | null
+  value: number
+}
 
 export function Editor({ onSaved }: { onSaved: () => void }) {
   const toast = useToast()
@@ -26,6 +36,7 @@ export function Editor({ onSaved }: { onSaved: () => void }) {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
   const [k, setK] = useState(16)
   const [seg, setSeg] = useState<SegmentResult | null>(null)
+  const [progress, setProgress] = useState<Progress | null>(null)
   const [busy, setBusy] = useState<'idle' | 'analyzing' | 'segmenting' | 'exporting'>('idle')
   const [error, setError] = useState<string | null>(null)
   const [pageSize, setPageSize] = useState('A4')
@@ -36,10 +47,13 @@ export function Editor({ onSaved }: { onSaved: () => void }) {
   const didInitialSegment = useRef(false)
   const lastSegmentedK = useRef<number | null>(null)
   const localPreviewRef = useRef<string | null>(null)
+  // Bumped to supersede an in-flight poll loop (new k, new file, or unmount).
+  const segRun = useRef(0)
 
-  // Revoke the outstanding object URL when the editor unmounts.
+  // Revoke the outstanding object URL and stop polling when the editor unmounts.
   useEffect(
     () => () => {
+      segRun.current++
       if (localPreviewRef.current) URL.revokeObjectURL(localPreviewRef.current)
     },
     [],
@@ -60,9 +74,11 @@ export function Editor({ onSaved }: { onSaved: () => void }) {
         return
       }
     }
+    segRun.current++ // cancel any in-flight poll from a previous image
     setFile(f)
     setImageId(null)
     setSeg(null)
+    setProgress(null)
     setPreviewUrl(null)
     setError(null)
     didInitialSegment.current = false
@@ -77,19 +93,52 @@ export function Editor({ onSaved }: { onSaved: () => void }) {
     if (f) onPickFile(f)
   }
 
+  // Enqueue a segmentation job and poll it to completion, streaming progress.
+  // A run token (segRun) lets a newer call (slider change / new file / unmount)
+  // supersede an older poll loop so stale results never land. Returns whether
+  // segmentation completed successfully.
   const runSegment = useCallback(
-    async (id: string, colors: number) => {
+    async (id: string, colors: number): Promise<boolean> => {
+      const myRun = ++segRun.current
+      const current = () => segRun.current === myRun
       setBusy('segmenting')
       setError(null)
+      setProgress({ stage: 'queued', value: 0 })
       try {
-        setSeg(await segment(id, colors))
-        lastSegmentedK.current = colors
+        await startSegment(id, colors)
+        for (;;) {
+          if (!current()) return false // superseded
+          const st = await getSegmentStatus(id)
+          if (!current()) return false
+
+          if (st.status === 'complete') {
+            setSeg({
+              palette: st.palette ?? [],
+              region_map_url: st.region_map_url ?? '',
+              painted_preview_url: st.painted_preview_url,
+              svg_url: st.svg_url,
+              k: st.k ?? colors,
+            })
+            lastSegmentedK.current = colors
+            setProgress(null)
+            setBusy('idle')
+            return true
+          }
+          if (st.status === 'failed' || st.status === 'expired') {
+            throw new Error(st.error ?? 'Не удалось обработать изображение')
+          }
+
+          setProgress({ stage: st.stage ?? 'queued', value: st.progress ?? 0 })
+          await sleep(POLL_INTERVAL_MS)
+        }
       } catch (e) {
+        if (!current()) return false
         const m = msg(e)
         setError(m)
         toast.error(m)
-      } finally {
+        setProgress(null)
         setBusy('idle')
+        return false
       }
     },
     [toast],
@@ -107,9 +156,9 @@ export function Editor({ onSaved }: { onSaved: () => void }) {
       didInitialSegment.current = true
       // Mark this k as handled so the debounce effect doesn't double-segment.
       lastSegmentedK.current = res.predicted_k
-      await runSegment(res.image_id, res.predicted_k)
-      onSaved()
-      toast.success('Раскраска создана')
+      const ok = await runSegment(res.image_id, res.predicted_k)
+      onSaved() // refresh history regardless — the painting row exists now
+      if (ok) toast.success('Раскраска создана')
     } catch (e) {
       const m = msg(e)
       setError(m)
@@ -224,6 +273,10 @@ export function Editor({ onSaved }: { onSaved: () => void }) {
                 onChange={(e) => setK(Number(e.target.value))}
               />
             </div>
+
+            {busy === 'segmenting' && progress && (
+              <ProgressBar progress={progress.value} stage={progress.stage} />
+            )}
 
             <div className="control">
               <span className="control-label">Формат</span>

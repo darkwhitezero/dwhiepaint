@@ -806,6 +806,43 @@
   background: var(--danger);
 }
 
+/* ---------- async job progress ---------- */
+.progress {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.progress-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  font-size: 0.85rem;
+}
+.progress-stage {
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+.progress-pct {
+  color: var(--text-tertiary);
+  font-variant-numeric: tabular-nums;
+}
+.progress-track {
+  height: 6px;
+  border-radius: var(--radius-pill);
+  background: var(--border-soft);
+  overflow: hidden;
+}
+.progress-fill {
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent);
+  transition: width 0.4s var(--ease-out);
+}
+.progress-fill.is-indeterminate {
+  width: 40%;
+  animation: progress-indeterminate 1.3s infinite var(--ease);
+}
+
 /* ---------- shared skeleton shimmer ---------- */
 .skeleton {
   background: var(--skeleton);
@@ -879,6 +916,14 @@
 @keyframes art-fade-in {
   from {
     opacity: 0;
+  }
+}
+@keyframes progress-indeterminate {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(320%);
   }
 }
 

@@ -24,11 +24,28 @@ public class CvClient(HttpClient http)
         return await ReadJsonAsync(resp, ct);
     }
 
-    public async Task<JsonNode> SegmentAsync(string imageId, int k, CancellationToken ct)
+    /// <summary>Enqueue an async segmentation job; returns its job id.</summary>
+    public async Task<string> EnqueueSegmentAsync(string imageId, int k, CancellationToken ct)
     {
         var payload = JsonSerializer.Serialize(new { image_id = imageId, k });
         using var content = new StringContent(payload, Encoding.UTF8, "application/json");
-        using var resp = await http.PostAsync("/segment", content, ct);
+        using var resp = await http.PostAsync("/jobs", content, ct);
+        var node = await ReadJsonAsync(resp, ct);
+        return node["job_id"]!.GetValue<string>();
+    }
+
+    /// <summary>Poll live job status (stage + progress), or null if unknown/expired.</summary>
+    public async Task<JsonNode?> GetJobStatusAsync(string jobId, CancellationToken ct)
+    {
+        using var resp = await http.GetAsync($"/jobs/{jobId}", ct);
+        if (resp.StatusCode == System.Net.HttpStatusCode.NotFound) return null;
+        return await ReadJsonAsync(resp, ct);
+    }
+
+    /// <summary>Fetch the finished job result (palette + artifact urls).</summary>
+    public async Task<JsonNode> GetJobResultAsync(string jobId, CancellationToken ct)
+    {
+        using var resp = await http.GetAsync($"/jobs/{jobId}/result", ct);
         return await ReadJsonAsync(resp, ct);
     }
 

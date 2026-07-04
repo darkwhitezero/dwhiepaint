@@ -1,4 +1,8 @@
-from fastapi import FastAPI, File, HTTPException, UploadFile
+import json
+from contextlib import asynccontextmanager
+
+from arq import create_pool
+from fastapi import FastAPI, File, HTTPException, Request, UploadFile
 from fastapi.responses import Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -6,10 +10,26 @@ from pydantic import BaseModel
 from . import analyze as analyze_mod
 from . import config
 from . import export as export_mod
+from . import jobs as jobs_mod
 from . import segment as segment_mod
 from .cache import cache
 
-app = FastAPI(title="dwhiepaint CV service", version="0.1.0")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # ARQ pool for enqueuing/polling async segmentation jobs. If Redis is
+    # unavailable the sync endpoints (/analyze, /segment, /export) still work;
+    # only the /jobs routes degrade to 503.
+    try:
+        app.state.arq = await create_pool(jobs_mod.redis_settings())
+    except Exception:  # noqa: BLE001 — keep the API up without the queue
+        app.state.arq = None
+    yield
+    if app.state.arq is not None:
+        await app.state.arq.close()
+
+
+app = FastAPI(title="dwhiepaint CV service", version="0.1.0", lifespan=lifespan)
 app.mount("/cache", StaticFiles(directory=str(config.CACHE_DIR)), name="cache")
 
 
@@ -71,6 +91,49 @@ def segment(req: SegmentRequest):
         "svg_url": seg.svg_url,
         "k": seg.k,
     }
+
+
+# --- async jobs (Phase 6) ---------------------------------------------------
+
+def _require_arq(request: Request):
+    arq = request.app.state.arq
+    if arq is None:
+        raise HTTPException(status_code=503, detail="job queue unavailable")
+    return arq
+
+
+@app.post("/jobs")
+async def enqueue_segment(req: SegmentRequest, request: Request):
+    """Enqueue a segmentation job; returns a job_id to poll."""
+    arq = _require_arq(request)
+    job = await arq.enqueue_job("run_segment", req.image_id, req.k, req.detail)
+    if job is None:  # a job with this id already exists / couldn't enqueue
+        raise HTTPException(status_code=409, detail="could not enqueue job")
+    # Seed the hash so an immediate poll reports "queued" before the worker picks it up.
+    key = jobs_mod.job_key(job.job_id)
+    await arq.hset(key, mapping={"status": "queued", "stage": "queued", "progress": "0.0"})
+    await arq.expire(key, config.JOB_RESULT_TTL_SECONDS)
+    return {"job_id": job.job_id}
+
+
+@app.get("/jobs/{job_id}")
+async def job_status(job_id: str, request: Request):
+    arq = _require_arq(request)
+    job = await jobs_mod.read_job(arq, job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="job not found or expired")
+    return jobs_mod.status_view(job)
+
+
+@app.get("/jobs/{job_id}/result")
+async def job_result(job_id: str, request: Request):
+    arq = _require_arq(request)
+    job = await jobs_mod.read_job(arq, job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="job not found or expired")
+    if job.get("status") != "complete":
+        raise HTTPException(status_code=409, detail=f"job not complete: {job.get('status')}")
+    return json.loads(job["result"])
 
 
 @app.post("/export")

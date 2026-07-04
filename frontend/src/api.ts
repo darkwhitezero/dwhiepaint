@@ -35,6 +35,32 @@ export interface SegmentResult {
   svg_url?: string | null
   k: number
 }
+
+// Live status of an async segmentation job (Phase 6). While running it carries
+// the current stage + progress fraction; when complete it also carries the full
+// SegmentResult fields.
+export type SegmentStage =
+  | 'queued'
+  | 'superpixels'
+  | 'merge'
+  | 'smooth'
+  | 'render'
+  | 'vectorize'
+  | 'done'
+  | 'failed'
+
+export interface SegmentStatus {
+  status: 'idle' | 'queued' | 'processing' | 'complete' | 'failed' | 'expired'
+  stage?: SegmentStage | null
+  progress?: number
+  error?: string
+  // Present only when status === 'complete'.
+  palette?: PaletteColor[]
+  region_map_url?: string
+  painted_preview_url?: string | null
+  svg_url?: string | null
+  k?: number
+}
 export interface PaintingSummary {
   image_id: string
   color_count: number
@@ -125,13 +151,20 @@ export async function uploadImage(file: File): Promise<AnalyzeResult> {
   )
 }
 
-export async function segment(imageId: string, k: number): Promise<SegmentResult> {
+// Enqueue an async segmentation job; poll getSegmentStatus for progress/result.
+export async function startSegment(imageId: string, k: number): Promise<{ job_id: string }> {
   return handleAuthed(
-    await fetch(`${API_BASE_URL}/api/paintings/${imageId}/colors`, {
-      method: 'PATCH',
+    await fetch(`${API_BASE_URL}/api/paintings/${imageId}/segment`, {
+      method: 'POST',
       headers: authHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify({ k }),
     }),
+  )
+}
+
+export async function getSegmentStatus(imageId: string): Promise<SegmentStatus> {
+  return handleAuthed(
+    await fetch(`${API_BASE_URL}/api/paintings/${imageId}/segment`, { headers: authHeaders() }),
   )
 }
 

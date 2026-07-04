@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import heapq
+from typing import Callable
 
 import cv2
 import numpy as np
@@ -12,20 +13,39 @@ from . import config, render, storage, superpixels, vectorize
 from .cache import ImageEntry, PaletteEntry, Segmentation
 from .color_naming import name_for_lab
 
+# A progress reporter: (stage_name, fraction_complete_in_[0,1]) -> None. Used by
+# the async worker to stream per-stage progress to Redis; the sync path passes
+# nothing and the calls are no-ops.
+ProgressFn = Callable[[str, float], None]
 
-def segment(entry: ImageEntry, k: int, detail: str | None = None) -> tuple[Segmentation, str]:
+
+def _noop(stage: str, frac: float) -> None:  # pragma: no cover - trivial
+    pass
+
+
+def segment(
+    entry: ImageEntry,
+    k: int,
+    detail: str | None = None,
+    progress: ProgressFn | None = None,
+) -> tuple[Segmentation, str]:
     """Edge-aware segmentation → clean regions → name palette → render line art.
 
     Quantizes via SLIC superpixels + area-weighted palette k-means (see
     ``superpixels``), then merges below-minimum regions and renders. The
     ``detail`` preset tunes superpixel density and the minimum paintable
-    region size together. Returns (segmentation, region_map_url).
+    region size together. ``progress`` (if given) is called at each stage
+    boundary with a rising fraction, so an async caller can stream status.
+    Returns (segmentation, region_map_url).
     """
+    report = progress or _noop
     preset = config.detail_preset(detail)
     k = int(np.clip(k, config.MIN_K, config.MAX_K))
     h, w = entry.height, entry.width
 
-    # Edge-aware quantization: SLIC superpixels + area-weighted palette k-means.
+    # Edge-aware quantization: SLIC superpixels + area-weighted palette k-means
+    # (the heaviest single stage — superpixel oversegmentation + clustering).
+    report("superpixels", 0.05)
     labels, centroids = superpixels.quantize(entry.lab, preset["slic_n_segments"], k)
     actual_k = centroids.shape[0]
 
@@ -33,6 +53,7 @@ def segment(entry: ImageEntry, k: int, detail: str | None = None) -> tuple[Segme
     if actual_k <= 255:
         labels = cv2.medianBlur(labels.astype(np.uint8), 3).astype(np.int32)
 
+    report("merge", 0.5)
     region_id, region_cluster, areas = connected_regions(labels, actual_k)
     min_area = max(16, int(preset["min_region_area_frac"] * h * w))
     cleaned = merge_small_regions(
@@ -41,6 +62,7 @@ def segment(entry: ImageEntry, k: int, detail: str | None = None) -> tuple[Segme
 
     # Round staircased boundaries on the label map itself (not per-contour), so
     # each shared edge stays a single smooth line for both neighbors.
+    report("smooth", 0.68)
     cleaned = _smooth_label_map(cleaned, config.LABEL_SMOOTH_SIGMA)
 
     idx_img, palette = _build_palette(cleaned, entry.rgb)
@@ -51,13 +73,17 @@ def segment(entry: ImageEntry, k: int, detail: str | None = None) -> tuple[Segme
     # Three artifacts from the one label map: raster line art (fast on-screen),
     # a painted-preview PNG ("what it'll look like done"), and the canonical
     # scalable SVG line art.
+    report("render", 0.78)
     canvas = render.line_art(idx_img, palette, thickness=1)
     seg.region_map_url = storage.save_rgb_png(entry.image_id, "regions.png", canvas)
     preview = render.painted_preview(idx_img, palette)
     seg.painted_preview_url = storage.save_rgb_png(entry.image_id, "preview_painted.png", preview)
+
+    report("vectorize", 0.9)
     svg = vectorize.to_svg(idx_img, palette)
     seg.svg_url = storage.save_text(entry.image_id, "regions.svg", svg)
 
+    report("done", 1.0)
     return seg, seg.region_map_url
 
 

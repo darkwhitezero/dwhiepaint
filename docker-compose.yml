@@ -15,17 +15,49 @@ services:
       timeout: 5s
       retries: 10
 
+  redis:
+    image: redis:7-alpine
+    expose:
+      - "6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
   cv-service:
     build: ./cv-service
     environment:
       CACHE_TTL_SECONDS: 1800
+      CACHE_DIR: /data/cache
+      REDIS_URL: "redis://redis:6379"
+    volumes:
+      - cvcache:/data/cache
     expose:
       - "8001"
+    depends_on:
+      redis:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8001/health')"]
       interval: 10s
       timeout: 5s
       retries: 5
+
+  # Same image as cv-service, different entrypoint: pulls segmentation jobs off
+  # Redis and runs the heavy pipeline. Shares the cache volume so the artifacts
+  # it renders are served by cv-service's /cache mount.
+  worker:
+    build: ./cv-service
+    command: ["arq", "app.worker.WorkerSettings"]
+    environment:
+      CACHE_DIR: /data/cache
+      REDIS_URL: "redis://redis:6379"
+    volumes:
+      - cvcache:/data/cache
+    depends_on:
+      redis:
+        condition: service_healthy
 
   backend-api:
     build: ./backend-api
@@ -57,3 +89,4 @@ services:
 volumes:
   pgdata:
   uploads:
+  cvcache:

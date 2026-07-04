@@ -13,7 +13,9 @@ import threading
 import time
 from dataclasses import dataclass, field
 
+import cv2
 import numpy as np
+from skimage.color import rgb2lab
 
 from . import config
 
@@ -80,3 +82,32 @@ class ImageCache:
 
 
 cache = ImageCache()
+
+
+def load_entry(image_id: str) -> ImageEntry | None:
+    """Return the cached entry, reconstructing it from disk on a miss.
+
+    ``analyze`` persists the resized, denoised working image as ``preview.png``
+    in the shared cache dir; the Lab array is cheap to recompute from it. This
+    lets a *separate* worker process — which does not share this module's
+    in-memory dict — run segmentation, and lets the sync path survive a service
+    restart or TTL eviction instead of returning 404. The reconstruct is
+    byte-exact w.r.t. the analyzed pixels (PNG is lossless), so results match.
+    """
+    hit = cache.get(image_id)
+    if hit is not None:
+        return hit
+
+    from . import storage  # local import: storage has no reverse dep on cache
+
+    path = storage.image_dir(image_id) / "preview.png"
+    if not path.exists():
+        return None
+    bgr = cv2.imread(str(path), cv2.IMREAD_COLOR)
+    if bgr is None:
+        return None
+    rgb = cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB)
+    lab = rgb2lab(rgb.astype(np.float64) / 255.0)
+    entry = ImageEntry(image_id=image_id, rgb=rgb, lab=lab)
+    cache.put(entry)
+    return entry

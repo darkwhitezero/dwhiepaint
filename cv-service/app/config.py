@@ -6,6 +6,12 @@ APP_DIR = Path(__file__).resolve().parent
 DATA_DIR = APP_DIR.parent / "data"
 CACHE_DIR = Path(os.getenv("CACHE_DIR", "/tmp/dwhiepaint-cache"))
 
+# Redis (async job queue, Phase 6). The cv-service API enqueues jobs and reads
+# per-stage progress from here; the ARQ worker runs the heavy pipeline. Ephemeral
+# — only job progress/results live here, never user data (that's Postgres).
+REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379")
+JOB_RESULT_TTL_SECONDS = int(os.getenv("JOB_RESULT_TTL_SECONDS", "3600"))
+
 # Pipeline parameters
 MAX_SIDE = int(os.getenv("MAX_SIDE", "2000"))          # longest image side after resize
 CACHE_TTL_SECONDS = int(os.getenv("CACHE_TTL_SECONDS", "1800"))
