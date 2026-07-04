@@ -191,6 +191,7 @@ export function Editor({ onSaved }: { onSaved: () => void }) {
       {file && !imageId && (
         <div className="editor-actions">
           <button className="btn btn-primary" disabled={busy !== 'idle'} onClick={onCreate}>
+            {busy === 'analyzing' && <span className="spinner" aria-hidden="true" />}
             {busy === 'analyzing' ? 'Анализируем…' : 'Создать раскраску'}
           </button>
         </div>
@@ -208,7 +209,9 @@ export function Editor({ onSaved }: { onSaved: () => void }) {
             <div className="control control-slider">
               <div className="control-label">
                 <span>Количество цветов</span>
-                <strong>
+                {/* Keying by k remounts the node on every change, replaying
+                    the pulse keyframe as instant visual feedback. */}
+                <strong key={k} className="k-pulse">
                   {k}
                   {busy === 'segmenting' && <em> · пересчёт…</em>}
                 </strong>
@@ -267,6 +270,7 @@ export function Editor({ onSaved }: { onSaved: () => void }) {
               onClick={onExport}
               disabled={!seg || busy !== 'idle'}
             >
+              {busy === 'exporting' && <span className="spinner" aria-hidden="true" />}
               {busy === 'exporting' ? 'Готовим…' : `Скачать ${format.toUpperCase()}`}
             </button>
           </div>
@@ -281,6 +285,7 @@ export function Editor({ onSaved }: { onSaved: () => void }) {
               <div className="result-canvas">
                 {seg && (
                   <img
+                    key={seg.region_map_url}
                     className={`result-art${busy === 'segmenting' ? ' is-loading' : ''}`}
                     src={assetUrl(seg.region_map_url)}
                     alt="Раскраска по номерам"

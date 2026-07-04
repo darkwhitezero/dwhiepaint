@@ -13,6 +13,16 @@
       rel="stylesheet"
     />
     <title>dwhiepaint — раскраска по номерам</title>
+    <script>
+      // Apply a saved manual theme before first paint, so there's no flash
+      // of the wrong theme while React hydrates.
+      (function () {
+        var saved = localStorage.getItem('dwhiepaint.theme');
+        if (saved === 'light' || saved === 'dark') {
+          document.documentElement.setAttribute('data-theme', saved);
+        }
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

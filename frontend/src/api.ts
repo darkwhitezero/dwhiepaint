@@ -40,6 +40,15 @@ export interface PaintingSummary {
   created_at: string
   has_result: boolean
   original_url: string
+  share_url: string | null
+}
+export interface SharedPainting {
+  image_id: string
+  color_count: number
+  status: string
+  has_result: boolean
+  original_url: string
+  palette: PaletteColor[]
 }
 
 export class ApiError extends Error {
@@ -152,6 +161,33 @@ export async function exportBlob(
 }
 export async function resultBlob(imageId: string): Promise<Blob> {
   return fetchBlob(`${API_BASE_URL}/api/paintings/${imageId}/result`)
+}
+
+export async function shareLink(imageId: string): Promise<{ share_url: string }> {
+  return handleAuthed(
+    await fetch(`${API_BASE_URL}/api/paintings/${imageId}/share`, {
+      method: 'POST',
+      headers: authHeaders(),
+    }),
+  )
+}
+export async function unshareLink(imageId: string): Promise<void> {
+  const res = await fetch(`${API_BASE_URL}/api/paintings/${imageId}/share`, {
+    method: 'DELETE',
+    headers: authHeaders(),
+  })
+  checkAuth(res)
+  if (!res.ok) throw new ApiError(`HTTP ${res.status}`, res.status)
+}
+
+// --- shared (anonymous) -----------------------------------------------------
+export async function getSharedPainting(token: string): Promise<SharedPainting> {
+  return handle(await fetch(`${API_BASE_URL}/api/shared/${token}`))
+}
+export async function sharedResultBlob(token: string): Promise<Blob> {
+  const res = await fetch(`${API_BASE_URL}/api/shared/${token}/result`)
+  if (!res.ok) throw new ApiError(`HTTP ${res.status}`, res.status)
+  return res.blob()
 }
 
 export function assetUrl(path: string): string {

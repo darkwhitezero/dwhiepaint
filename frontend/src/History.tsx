@@ -3,7 +3,9 @@ import {
   assetUrl,
   listPaintings,
   resultBlob,
+  shareLink,
   triggerDownload,
+  unshareLink,
   type PaintingSummary,
 } from './api'
 import { useToast } from './Toast'
@@ -44,6 +46,27 @@ export function History({
       const blob = await resultBlob(id)
       const ext = blob.type === 'image/png' ? 'png' : 'pdf'
       triggerDownload(blob, `dwhiepaint-${id}.${ext}`)
+    } catch (e) {
+      toast.error(String(e instanceof Error ? e.message : e))
+    }
+  }
+
+  async function share(p: PaintingSummary) {
+    try {
+      if (p.share_url) {
+        await unshareLink(p.image_id)
+        setItems((list) =>
+          list.map((x) => (x.image_id === p.image_id ? { ...x, share_url: null } : x)),
+        )
+        toast.success('Ссылка отозвана')
+        return
+      }
+      const { share_url } = await shareLink(p.image_id)
+      setItems((list) =>
+        list.map((x) => (x.image_id === p.image_id ? { ...x, share_url } : x)),
+      )
+      await navigator.clipboard.writeText(`${window.location.origin}${share_url}`)
+      toast.success('Ссылка скопирована')
     } catch (e) {
       toast.error(String(e instanceof Error ? e.message : e))
     }
@@ -104,9 +127,14 @@ export function History({
                 </span>
               </div>
               {p.has_result ? (
-                <button className="btn btn-ghost btn-sm" onClick={() => download(p.image_id)}>
-                  Скачать
-                </button>
+                <div className="card-actions">
+                  <button className="btn btn-ghost btn-sm" onClick={() => download(p.image_id)}>
+                    Скачать
+                  </button>
+                  <button className="btn btn-ghost btn-sm" onClick={() => share(p)}>
+                    {p.share_url ? 'Отозвать' : 'Поделиться'}
+                  </button>
+                </div>
               ) : (
                 <span className="card-status">{p.status}</span>
               )}

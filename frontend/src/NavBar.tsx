@@ -1,4 +1,6 @@
+import { ThemeToggleCompact } from './ThemeToggle'
 import type { Tab } from './useTab'
+import type { Theme } from './useTheme'
 
 type Health = 'checking' | 'ok' | 'down'
 
@@ -19,11 +21,15 @@ export function NavBar({
   onTab,
   health,
   email,
+  theme,
+  onTheme,
 }: {
   tab: Tab
   onTab: (t: Tab) => void
   health: Health
   email: string
+  theme: Theme
+  onTheme: (t: Theme) => void
 }) {
   const initial = email.trim().charAt(0).toUpperCase() || '?'
 
@@ -54,6 +60,7 @@ export function NavBar({
             <span className="status-dot" aria-hidden="true" />
             <span className="status-text">{HEALTH_TEXT[health]}</span>
           </span>
+          <ThemeToggleCompact theme={theme} onChange={onTheme} />
           <button
             className="avatar avatar-btn"
             onClick={() => onTab('account')}

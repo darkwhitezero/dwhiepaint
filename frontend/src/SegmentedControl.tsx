@@ -15,8 +15,12 @@ export function SegmentedControl<T extends string>({
   options: Option<T>[]
   ariaLabel?: string
 }) {
+  const index = Math.max(0, options.findIndex((o) => o.value === value))
+  const style = { '--seg-count': options.length, '--seg-index': index } as React.CSSProperties
+
   return (
-    <div className="segmented" role="radiogroup" aria-label={ariaLabel}>
+    <div className="segmented" role="radiogroup" aria-label={ariaLabel} style={style}>
+      <span className="segmented-thumb" aria-hidden="true" />
       {options.map((o) => (
         <button
           key={o.value}
