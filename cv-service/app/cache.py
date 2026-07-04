@@ -33,6 +33,10 @@ class Segmentation:
     # HxW cluster index per pixel, already cleaned (small regions merged).
     label_img: np.ndarray
     palette: list[PaletteEntry]
+    # Cache-relative URLs of the rendered artifacts (set by segment()).
+    region_map_url: str | None = None
+    painted_preview_url: str | None = None
+    svg_url: str | None = None
 
 
 @dataclass

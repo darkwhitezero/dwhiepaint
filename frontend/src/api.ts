@@ -31,6 +31,8 @@ export interface AnalyzeResult {
 export interface SegmentResult {
   palette: PaletteColor[]
   region_map_url: string
+  painted_preview_url?: string | null
+  svg_url?: string | null
   k: number
 }
 export interface PaintingSummary {

@@ -22,3 +22,10 @@ def save_rgb_png(image_id: str, filename: str, rgb: np.ndarray) -> str:
     bgr = cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR)
     cv2.imwrite(str(path), bgr)
     return f"/cache/{image_id}/{filename}"
+
+
+def save_text(image_id: str, filename: str, text: str) -> str:
+    """Save a text artifact (e.g. an SVG); return its /cache-relative URL."""
+    path = image_dir(image_id) / filename
+    path.write_text(text, encoding="utf-8")
+    return f"/cache/{image_id}/{filename}"

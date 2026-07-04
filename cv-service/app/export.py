@@ -11,11 +11,10 @@ from __future__ import annotations
 import io
 import math
 
-import cv2
-import numpy as np
+import cairosvg
 from PIL import Image, ImageDraw, ImageFont
 
-from . import config, render
+from . import config, vectorize
 from .cache import ImageEntry, PaletteEntry
 
 Rect = tuple[int, int, int, int]  # x, y, w, h
@@ -139,13 +138,19 @@ def _paste_artwork(page: Image.Image, draw: ImageDraw.ImageDraw,
     scale = min(aw / src_w, ah / src_h)
     tw, th = max(1, round(src_w * scale)), max(1, round(src_h * scale))
 
-    scaled_label = cv2.resize(seg.label_img.astype(np.int32), (tw, th),
-                              interpolation=cv2.INTER_NEAREST)
-    art = render.line_art(scaled_label, seg.palette,
-                          thickness=round(3 * _SCALE), min_label_radius=11 * _SCALE)
+    # Rasterize the canonical vector line art at the print size. Scaling a
+    # vector (rather than NEAREST-upscaling the working-res label map) keeps
+    # outlines razor-smooth at 600 dpi instead of staircasing every edge.
+    svg = vectorize.to_svg(
+        seg.label_img, seg.palette,
+        min_label_radius=6.0,
+        stroke_px=max(1.0, min(src_h, src_w) * 0.0016),
+    )
+    png = cairosvg.svg2png(bytestring=svg.encode("utf-8"), output_width=tw, output_height=th)
+    art = Image.open(io.BytesIO(png)).convert("RGB")
 
     ox, oy = ax + (aw - tw) // 2, ay + (ah - th) // 2
-    page.paste(Image.fromarray(art), (ox, oy))
+    page.paste(art, (ox, oy))
     draw.rectangle([ox - 1, oy - 1, ox + tw, oy + th], outline=(210, 210, 210))
 
 

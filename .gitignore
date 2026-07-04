@@ -28,3 +28,6 @@ cv-service/**/__pycache__/
 # in backend-api/DwhiePaint.Api/Data/colors.json)
 /colors.json
 /test_image/
+
+# graphify knowledge-graph output (regenerated on demand via /graphify)
+graphify-out/

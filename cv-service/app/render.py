@@ -5,35 +5,21 @@ from __future__ import annotations
 import cv2
 import numpy as np
 
-from . import config
+from . import contours, numbering
 from .cache import PaletteEntry
 
 
 def _draw_smoothed_outlines(canvas: np.ndarray, label_img: np.ndarray, thickness: int) -> None:
-    """Draw simplified per-label contours instead of a raw pixel-diff border.
-
-    A pixel-diff boundary renders every JPEG-noise staircase and antialiased
-    edge as a jagged line. Extracting each label's contour and simplifying it
-    with ``approxPolyDP`` smooths that noise into clean, printable curves
-    while keeping real corners intact.
-
-    Epsilon is the smaller of a perimeter-relative fraction and an absolute
-    pixel cap. The absolute cap matters on thin, elongated regions (a hair
-    strand, a thin merged sliver): perimeter is large relative to width there,
-    so the relative term alone can exceed the region's own width and make
-    approxPolyDP collapse its two sides into a self-intersecting polygon.
+    """Draw simplified + Chaikin-smoothed per-label contours (see ``contours``),
+    so on-screen line art matches the SVG's smooth outlines rather than the raw
+    pixel-diff staircase a boundary walk would produce.
     """
     for lbl in np.unique(label_img):
         mask = (label_img == lbl).astype(np.uint8)
-        contours, _ = cv2.findContours(mask, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
-        for contour in contours:
-            if len(contour) < 3:
-                continue
-            perimeter = cv2.arcLength(contour, True)
-            epsilon = min(config.CONTOUR_SIMPLIFY_EPS * perimeter, config.CONTOUR_SIMPLIFY_MAX_PX)
-            simplified = cv2.approxPolyDP(contour, epsilon, True)
+        for c in contours.smoothed_contours(mask):
+            pts = np.round(c).astype(np.int32).reshape(-1, 1, 2)
             cv2.polylines(
-                canvas, [simplified], isClosed=True, color=(0, 0, 0),
+                canvas, [pts], isClosed=True, color=(0, 0, 0),
                 thickness=thickness, lineType=cv2.LINE_AA,
             )
 
@@ -65,7 +51,13 @@ def _label_regions(
     index: int,
     min_label_radius: float,
 ) -> None:
-    """Draw `index` inside every sufficiently large component of that label."""
+    """Draw `index` inside every sufficiently large component of that label.
+
+    Placement uses the pole of inaccessibility (see ``numbering``) so the digit
+    lands at the region's most interior point even for concave shapes. A
+    component whose inscribed radius is below ``min_label_radius`` is left
+    unnumbered — the color still appears in the legend.
+    """
     mask = (label_img == index - 1).astype(np.uint8)
     n, comp, stats, _ = cv2.connectedComponentsWithStats(mask, connectivity=4)
 
@@ -75,15 +67,25 @@ def _label_regions(
             continue
 
         crop = (comp[y:y + bh, x:x + bw] == c).astype(np.uint8)
-        dt = cv2.distanceTransform(crop, cv2.DIST_L2, 3)
-        radius = float(dt.max())
+        rx, ry, radius = numbering.interior_point(crop)
         if radius < min_label_radius:
             continue
 
-        ry, rx = np.unravel_index(int(np.argmax(dt)), dt.shape)
-        anchor = (x + rx, y + ry)
-
+        anchor = (int(x + rx), int(y + ry))
         _put_centered_number(canvas, str(index), anchor, radius)
+
+
+def painted_preview(label_img: np.ndarray, palette: list[PaletteEntry]) -> np.ndarray:
+    """Render the label map filled with palette colors — a preview of the
+    finished painting. Cheap (a lookup table) and a big UX cue for the user.
+    """
+    h, w = label_img.shape
+    lut = np.full((len(palette) + 1, 3), 255, dtype=np.uint8)
+    for entry in palette:
+        rgb = tuple(int(entry.hex[j:j + 2], 16) for j in (1, 3, 5))
+        lut[entry.index - 1] = rgb
+    idx = np.clip(label_img, 0, len(palette) - 1) if palette else label_img
+    return lut[idx]
 
 
 def _put_centered_number(

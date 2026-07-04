@@ -6,3 +6,6 @@ pillow==11.0.0
 opencv-python-headless==4.10.0.84
 scikit-image==0.24.0
 scikit-learn==1.5.2
+shapely==2.0.6
+svgwrite==1.4.3
+cairosvg==2.7.1

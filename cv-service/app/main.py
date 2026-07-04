@@ -16,6 +16,7 @@ app.mount("/cache", StaticFiles(directory=str(config.CACHE_DIR)), name="cache")
 class SegmentRequest(BaseModel):
     image_id: str
     k: int
+    detail: str | None = None
 
 
 class ExportRequest(BaseModel):
@@ -55,7 +56,7 @@ def segment(req: SegmentRequest):
     if entry is None:
         raise HTTPException(status_code=404, detail="image_id not found or expired")
 
-    seg, region_map_url = segment_mod.segment(entry, req.k)
+    seg, region_map_url = segment_mod.segment(entry, req.k, req.detail)
     palette = [
         PaletteColor(
             index=c.index, hex=c.hex, lab=list(c.lab),
@@ -63,7 +64,13 @@ def segment(req: SegmentRequest):
         )
         for c in seg.palette
     ]
-    return {"palette": palette, "region_map_url": region_map_url, "k": seg.k}
+    return {
+        "palette": palette,
+        "region_map_url": region_map_url,
+        "painted_preview_url": seg.painted_preview_url,
+        "svg_url": seg.svg_url,
+        "k": seg.k,
+    }
 
 
 @app.post("/export")

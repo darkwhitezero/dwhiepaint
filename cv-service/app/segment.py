@@ -1,4 +1,4 @@
-"""/segment pipeline: k-means → connected regions → merge small → palette + line art."""
+"""/segment pipeline: superpixels → palette → merge small → palette + line art."""
 
 from __future__ import annotations
 
@@ -7,43 +7,77 @@ import heapq
 import cv2
 import numpy as np
 from skimage.color import rgb2lab
-from sklearn.cluster import MiniBatchKMeans
 
-from . import config, render, storage
+from . import config, render, storage, superpixels, vectorize
 from .cache import ImageEntry, PaletteEntry, Segmentation
 from .color_naming import name_for_lab
 
 
-def segment(entry: ImageEntry, k: int) -> tuple[Segmentation, str]:
-    """Cluster into k colors, clean regions, name the palette, render line art.
+def segment(entry: ImageEntry, k: int, detail: str | None = None) -> tuple[Segmentation, str]:
+    """Edge-aware segmentation → clean regions → name palette → render line art.
 
-    Returns (segmentation, region_map_url).
+    Quantizes via SLIC superpixels + area-weighted palette k-means (see
+    ``superpixels``), then merges below-minimum regions and renders. The
+    ``detail`` preset tunes superpixel density and the minimum paintable
+    region size together. Returns (segmentation, region_map_url).
     """
+    preset = config.detail_preset(detail)
     k = int(np.clip(k, config.MIN_K, config.MAX_K))
     h, w = entry.height, entry.width
 
-    lab_pixels = entry.lab.reshape(-1, 3)
-    km = MiniBatchKMeans(n_clusters=k, random_state=42, n_init=3, batch_size=2048)
-    labels = km.fit_predict(lab_pixels).astype(np.int32).reshape(h, w)
+    # Edge-aware quantization: SLIC superpixels + area-weighted palette k-means.
+    labels, centroids = superpixels.quantize(entry.lab, preset["slic_n_segments"], k)
+    actual_k = centroids.shape[0]
 
-    # Despeckle isolated pixels before splitting into spatial regions.
-    if k <= 255:
+    # Despeckle stray single pixels at superpixel seams before splitting regions.
+    if actual_k <= 255:
         labels = cv2.medianBlur(labels.astype(np.uint8), 3).astype(np.int32)
 
-    region_id, region_cluster, areas = connected_regions(labels, k)
-    min_area = max(16, int(config.MIN_REGION_AREA_FRAC * h * w))
+    region_id, region_cluster, areas = connected_regions(labels, actual_k)
+    min_area = max(16, int(preset["min_region_area_frac"] * h * w))
     cleaned = merge_small_regions(
-        region_id, region_cluster, areas, min_area, cluster_lab=km.cluster_centers_,
+        region_id, region_cluster, areas, min_area, cluster_lab=centroids,
     )
+
+    # Round staircased boundaries on the label map itself (not per-contour), so
+    # each shared edge stays a single smooth line for both neighbors.
+    cleaned = _smooth_label_map(cleaned, config.LABEL_SMOOTH_SIGMA)
 
     idx_img, palette = _build_palette(cleaned, entry.rgb)
 
     seg = Segmentation(k=k, label_img=idx_img, palette=palette)
     entry.segmentation = seg
 
+    # Three artifacts from the one label map: raster line art (fast on-screen),
+    # a painted-preview PNG ("what it'll look like done"), and the canonical
+    # scalable SVG line art.
     canvas = render.line_art(idx_img, palette, thickness=1)
-    region_map_url = storage.save_rgb_png(entry.image_id, "regions.png", canvas)
-    return seg, region_map_url
+    seg.region_map_url = storage.save_rgb_png(entry.image_id, "regions.png", canvas)
+    preview = render.painted_preview(idx_img, palette)
+    seg.painted_preview_url = storage.save_rgb_png(entry.image_id, "preview_painted.png", preview)
+    svg = vectorize.to_svg(idx_img, palette)
+    seg.svg_url = storage.save_text(entry.image_id, "regions.svg", svg)
+
+    return seg, seg.region_map_url
+
+
+def _smooth_label_map(labels: np.ndarray, sigma: float) -> np.ndarray:
+    """Gaussian-argmax smoothing: blur each present label's membership and
+    re-assign every pixel to the strongest nearby label. Rounds boundaries
+    consistently for both sides of every shared edge (a running argmax keeps
+    it memory-light — no k-deep stack).
+    """
+    present = np.unique(labels)
+    if sigma <= 0 or len(present) < 2:
+        return labels
+    best = np.zeros(labels.shape, dtype=np.float32)
+    out = np.full(labels.shape, present[0], dtype=labels.dtype)
+    for c in present:
+        m = cv2.GaussianBlur((labels == c).astype(np.float32), (0, 0), sigma)
+        win = m > best
+        best[win] = m[win]
+        out[win] = c
+    return out
 
 
 def connected_regions(

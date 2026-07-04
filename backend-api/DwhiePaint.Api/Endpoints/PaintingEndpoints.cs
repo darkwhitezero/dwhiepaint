@@ -120,6 +120,8 @@ public static class PaintingEndpoints
         await db.SaveChangesAsync(ct);
 
         RewriteCacheUrl(result, "region_map_url");
+        RewriteCacheUrl(result, "painted_preview_url");
+        RewriteCacheUrl(result, "svg_url");
         return Results.Json(result);
     }
 
