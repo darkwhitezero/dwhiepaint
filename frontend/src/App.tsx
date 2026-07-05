@@ -3,6 +3,7 @@ import { checkHealth, getToken, setToken, setUnauthorizedHandler } from './api'
 import { AuthScreen } from './AuthScreen'
 import { NavBar } from './NavBar'
 import { Editor } from './Editor'
+import { Footer } from './Footer'
 import { History } from './History'
 import { Account } from './Account'
 import { SharedView } from './SharedView'
@@ -134,6 +135,7 @@ function App() {
             />
           </section>
         </main>
+        <Footer />
       </div>
     </ToastProvider>
   )

@@ -29,11 +29,12 @@
   --shadow-lg: 0 24px 60px -20px rgba(19, 24, 40, 0.28);
   --skeleton: linear-gradient(100deg, #e7eaf3 30%, #f4f6fb 50%, #e7eaf3 70%);
 
-  /* Aurora ambient background (very low opacity so it never fights content). */
-  --aurora-1: rgba(66, 126, 255, 0.72);
-  --aurora-2: rgba(90, 205, 222, 0.58);
-  --aurora-3: rgba(170, 120, 255, 0.62);
-  --grain-opacity: 0.04;
+  /* Aurora ambient background. Kept gentle in the light theme so it reads as a
+     soft tint, not an eye-searing wash. */
+  --aurora-1: rgba(120, 160, 255, 0.16);
+  --aurora-2: rgba(150, 214, 224, 0.13);
+  --aurora-3: rgba(198, 166, 255, 0.15);
+  --grain-opacity: 0.035;
 
   /* --- glass (theme-adaptive via color-mix on the theme's own tokens) --- */
   --glass-bg: color-mix(in srgb, var(--surface) 66%, transparent);

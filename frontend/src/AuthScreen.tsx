@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { login, register } from './api'
+import { Footer } from './Footer'
 
 export function AuthScreen({ onAuth }: { onAuth: (token: string, email: string) => void }) {
   const [mode, setMode] = useState<'login' | 'register'>('login')
@@ -33,12 +34,12 @@ export function AuthScreen({ onAuth }: { onAuth: (token: string, email: string) 
       <p className="auth-lead">Войдите, чтобы создавать и хранить свои работы.</p>
 
       <form className="auth-card panel" onSubmit={submit}>
-        <div className="segmented segmented-lg" role="radiogroup" aria-label="Вход или регистрация">
+        <div className="auth-tabs" role="radiogroup" aria-label="Вход или регистрация">
           <button
             type="button"
             role="radio"
             aria-checked={mode === 'login'}
-            className={`segmented-item${mode === 'login' ? ' is-active' : ''}`}
+            className={`auth-tab${mode === 'login' ? ' is-active' : ''}`}
             onClick={() => setMode('login')}
           >
             Вход
@@ -47,7 +48,7 @@ export function AuthScreen({ onAuth }: { onAuth: (token: string, email: string) 
             type="button"
             role="radio"
             aria-checked={mode === 'register'}
-            className={`segmented-item${mode === 'register' ? ' is-active' : ''}`}
+            className={`auth-tab${mode === 'register' ? ' is-active' : ''}`}
             onClick={() => setMode('register')}
           >
             Регистрация
@@ -82,11 +83,13 @@ export function AuthScreen({ onAuth }: { onAuth: (token: string, email: string) 
           </p>
         )}
 
-        <button className="btn btn-primary btn-block" type="submit" disabled={busy}>
+        <button className="btn btn-primary btn-block btn-cta" type="submit" disabled={busy}>
           {busy ? 'Подождите…' : mode === 'login' ? 'Войти' : 'Создать аккаунт'}
         </button>
         {mode === 'register' && <small className="field-hint">Пароль — минимум 8 символов.</small>}
       </form>
+
+      <Footer />
     </div>
   )
 }

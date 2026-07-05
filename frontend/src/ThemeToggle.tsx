@@ -1,15 +1,24 @@
+import { Monitor, Moon, Sun } from 'lucide-react'
 import { SegmentedControl } from './SegmentedControl'
 import type { Theme } from './useTheme'
 
-const OPTIONS: { value: Theme; label: string }[] = [
-  { value: 'system', label: '⟳' },
-  { value: 'light', label: '☀' },
-  { value: 'dark', label: '☾' },
-]
 const LABELS: Record<Theme, string> = {
   system: 'Система',
   light: 'Светлая',
   dark: 'Тёмная',
+}
+
+const ICONS: Record<Theme, typeof Sun> = {
+  system: Monitor,
+  light: Sun,
+  dark: Moon,
+}
+
+const ORDER: Theme[] = ['system', 'light', 'dark']
+
+function icon(theme: Theme) {
+  const Ico = ICONS[theme]
+  return <Ico size={16} strokeWidth={1.9} aria-hidden="true" />
 }
 
 /** Compact icon-only variant for the nav bar. */
@@ -25,7 +34,7 @@ export function ThemeToggleCompact({
       ariaLabel="Тема оформления"
       value={theme}
       onChange={onChange}
-      options={OPTIONS}
+      options={ORDER.map((v) => ({ value: v, label: icon(v), ariaLabel: LABELS[v] }))}
     />
   )
 }
@@ -43,7 +52,15 @@ export function ThemeToggleFull({
       ariaLabel="Тема оформления"
       value={theme}
       onChange={onChange}
-      options={OPTIONS.map((o) => ({ ...o, label: `${o.label} ${LABELS[o.value]}` }))}
+      options={ORDER.map((v) => ({
+        value: v,
+        label: (
+          <span className="seg-icon-label">
+            {icon(v)} {LABELS[v]}
+          </span>
+        ),
+        ariaLabel: LABELS[v],
+      }))}
     />
   )
 }

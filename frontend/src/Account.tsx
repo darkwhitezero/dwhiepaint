@@ -1,3 +1,4 @@
+import { Copy, LogOut } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { listPaintings } from './api'
 import { useToast } from './Toast'
@@ -58,6 +59,7 @@ export function Account({
         <div className="account-id">
           <span className="account-email">{email}</span>
           <button className="btn btn-ghost btn-sm" onClick={copyEmail}>
+            <Copy size={15} strokeWidth={1.9} aria-hidden="true" />
             Скопировать email
           </button>
         </div>
@@ -80,6 +82,7 @@ export function Account({
       </div>
 
       <button className="btn btn-danger" onClick={onLogout}>
+        <LogOut size={16} strokeWidth={1.9} aria-hidden="true" />
         Выйти из аккаунта
       </button>
     </div>

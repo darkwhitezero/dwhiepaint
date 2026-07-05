@@ -1,6 +1,10 @@
+import type { ReactNode } from 'react'
+
 interface Option<T extends string> {
   value: T
-  label: string
+  label: ReactNode
+  /** Text label for assistive tech when `label` is an icon. */
+  ariaLabel?: string
 }
 
 /** Apple-style segmented control (radiogroup) with a sliding active pill. */
@@ -27,6 +31,7 @@ export function SegmentedControl<T extends string>({
           type="button"
           role="radio"
           aria-checked={value === o.value}
+          aria-label={o.ariaLabel}
           className={`segmented-item${value === o.value ? ' is-active' : ''}`}
           onClick={() => onChange(o.value)}
         >

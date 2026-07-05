@@ -1,3 +1,4 @@
+import { Minus, Plus, RotateCcw } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { TransformComponent, TransformWrapper } from 'react-zoom-pan-pinch'
 import { assetUrl } from './api'
@@ -89,13 +90,13 @@ export function ResultViewer({
           <>
             <div className="rv-zoom">
               <button type="button" aria-label="Приблизить" onClick={() => zoomIn()}>
-                +
+                <Plus size={17} strokeWidth={2} aria-hidden="true" />
               </button>
               <button type="button" aria-label="Отдалить" onClick={() => zoomOut()}>
-                −
+                <Minus size={17} strokeWidth={2} aria-hidden="true" />
               </button>
               <button type="button" aria-label="Сбросить масштаб" onClick={() => resetTransform()}>
-                ↺
+                <RotateCcw size={16} strokeWidth={2} aria-hidden="true" />
               </button>
             </div>
             <TransformComponent wrapperClass="rv-canvas" contentClass="rv-stack">

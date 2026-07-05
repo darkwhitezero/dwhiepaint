@@ -1385,3 +1385,149 @@
     transform: translateY(-6px);
   }
 }
+
+/* ============================================================
+   FIXES & POLISH (Phase 13)
+   ============================================================ */
+
+/* Icons sit inline with button/label text. */
+.segmented-item {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+}
+.seg-icon-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+/* Separate Вход / Регистрация tabs (not a joined segmented control). */
+.auth-tabs {
+  display: flex;
+  gap: 0.6rem;
+  margin-bottom: 0.25rem;
+}
+.auth-tab {
+  flex: 1;
+  border: 1px solid var(--glass-border);
+  background: var(--glass-2);
+  color: var(--text-secondary);
+  border-radius: var(--radius-pill);
+  padding: 0.6rem 1rem;
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+  transition: color 0.2s var(--ease), background 0.2s var(--ease),
+    border-color 0.2s var(--ease), box-shadow 0.2s var(--ease), transform 0.1s var(--ease);
+}
+.auth-tab:hover {
+  color: var(--text);
+}
+.auth-tab:active {
+  transform: scale(0.98);
+}
+.auth-tab.is-active {
+  color: var(--on-accent);
+  background: linear-gradient(180deg, var(--accent-hover), var(--accent));
+  border-color: transparent;
+  box-shadow: 0 6px 16px -8px color-mix(in srgb, var(--accent) 70%, transparent);
+}
+
+/* Authorship footer. */
+.site-footer {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  padding: 2.25rem 1rem 2.5rem;
+  color: var(--text-tertiary);
+  font-size: 0.85rem;
+}
+.site-footer strong {
+  color: var(--text-secondary);
+  font-weight: 600;
+}
+.site-footer-dot {
+  opacity: 0.5;
+}
+.site-footer-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  color: var(--text-secondary);
+  text-decoration: none;
+  border-radius: 8px;
+  padding: 0.15rem 0.45rem;
+  transition: color 0.2s var(--ease), background 0.2s var(--ease);
+}
+.site-footer-link:hover {
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+
+/* Running white border on the auth CTA — replaces the primary sheen/lift.
+   The button keeps its gradient via ::after; ::before is the chased ring. */
+@property --border-angle {
+  syntax: '<angle>';
+  inherits: false;
+  initial-value: 0deg;
+}
+@keyframes border-chase {
+  to {
+    --border-angle: 360deg;
+  }
+}
+.btn-cta {
+  position: relative;
+  isolation: isolate;
+  z-index: 0;
+  overflow: visible;
+}
+.btn-cta::before {
+  content: '';
+  position: absolute;
+  inset: -2px;
+  z-index: -2;
+  border-radius: inherit;
+  background: conic-gradient(
+    from var(--border-angle),
+    transparent 18%,
+    #fff 45%,
+    rgba(255, 255, 255, 0.85) 52%,
+    transparent 82%
+  );
+  box-shadow: 0 0 22px color-mix(in srgb, #ffffff 55%, transparent);
+  opacity: 0;
+  transition: opacity 0.25s var(--ease);
+  animation: border-chase 2s linear infinite;
+  pointer-events: none;
+}
+.btn-cta::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  background: inherit;
+  transform: none;
+  transition: none;
+}
+.btn-cta:hover:not(:disabled) {
+  transform: none;
+}
+.btn-cta:hover:not(:disabled)::before {
+  opacity: 1;
+}
+.btn-cta:hover:not(:disabled)::after {
+  transform: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .btn-cta::before {
+    display: none;
+  }
+}

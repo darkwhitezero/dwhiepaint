@@ -24,6 +24,14 @@ const POLL_INTERVAL_MS = 700
 const msg = (e: unknown) => String(e instanceof Error ? e.message : e)
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
+// The CV service overwrites the same cache filenames (regions.svg,
+// preview_painted.png…) on every re-segmentation, so the URLs are byte-identical
+// between runs — the browser would serve the stale first render and the SVG
+// fetch effect (keyed on the url) wouldn't re-fire. A per-segmentation version
+// query busts that cache so the painted preview and outline actually update.
+const bust = (url: string | null | undefined, v: number): string | null | undefined =>
+  url ? `${url}${url.includes('?') ? '&' : '?'}v=${v}` : url
+
 interface Progress {
   stage: SegmentStage | null
   value: number
@@ -55,6 +63,8 @@ export function Editor({ onSaved }: { onSaved: () => void }) {
   const localPreviewRef = useRef<string | null>(null)
   // Bumped to supersede an in-flight poll loop (new k, new file, or unmount).
   const segRun = useRef(0)
+  // Bumped on each successful segmentation to cache-bust the artifact URLs.
+  const segVersion = useRef(0)
 
   // Revoke the outstanding object URL and stop polling when the editor unmounts.
   useEffect(
@@ -119,11 +129,12 @@ export function Editor({ onSaved }: { onSaved: () => void }) {
           if (!current()) return false
 
           if (st.status === 'complete') {
+            const v = ++segVersion.current
             setSeg({
               palette: st.palette ?? [],
-              region_map_url: st.region_map_url ?? '',
-              painted_preview_url: st.painted_preview_url,
-              svg_url: st.svg_url,
+              region_map_url: bust(st.region_map_url, v) ?? '',
+              painted_preview_url: bust(st.painted_preview_url, v),
+              svg_url: bust(st.svg_url, v),
               k: st.k ?? colors,
             })
             lastSegmentedSig.current = `${colors}|${preset}`

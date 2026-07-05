@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { assetUrl, getSharedPainting, sharedResultBlob, triggerDownload, type SharedPainting } from './api'
+import { Footer } from './Footer'
 import { Legend } from './Legend'
 import { useToast } from './Toast'
 
@@ -85,6 +86,7 @@ export function SharedView({ token }: { token: string }) {
           </div>
         )}
       </main>
+      <Footer />
     </div>
   )
 }
