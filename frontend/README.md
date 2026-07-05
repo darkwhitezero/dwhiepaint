@@ -1,32 +1,27 @@
-# React + TypeScript + Vite
+# dwhiepaint — frontend
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+React 19 + TypeScript + Vite. Интерфейс раскраски по номерам: загрузка,
+редактор с зумом/слоями/подсветкой палитры, история и кабинет. Общий обзор
+проекта — в [корневом README](../README.md).
 
-Currently, two official plugins are available:
+## Команды
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
-
-## React Compiler
-
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the Oxlint configuration
-
-If you are developing a production application, we recommend enabling type-aware lint rules by installing `oxlint-tsgolint` and editing `.oxlintrc.json`:
-
-```json
-{
-  "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["react", "typescript", "oxc"],
-  "options": {
-    "typeAware": true
-  },
-  "rules": {
-    "react/rules-of-hooks": "error",
-    "react/only-export-components": ["warn", { "allowConstantExport": true }]
-  }
-}
+```bash
+npm install
+npm run dev      # дев-сервер на http://localhost:5173
+npm run build    # проверка типов (tsc) + production-сборка
+npm run test     # модульные тесты (Vitest)
+npm run lint     # Oxlint
 ```
 
-See the [Oxlint rules documentation](https://oxc.rs/docs/guide/usage/linter/rules) for the full list of rules and categories.
+Адрес backend берётся из `VITE_API_BASE_URL` (по умолчанию
+`http://localhost:5000`).
+
+## Ориентиры в коде
+
+- `src/api.ts` — весь HTTP-слой и типы.
+- `src/Editor.tsx` — загрузка → постановка задачи → опрос прогресса → результат.
+- `src/ResultViewer.tsx` — зум/пан, переключение слоёв, инлайн-SVG с подсветкой.
+- `src/PalettePanel.tsx` — палитра и подсветка областей выбранного цвета.
+- `src/index.css` — токены темы, стекло и aurora-подложка; `src/App.css` — вёрстка
+  и «REDESIGN» блок стеклянных стилей.
