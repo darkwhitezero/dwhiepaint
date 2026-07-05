@@ -2,38 +2,55 @@
   color-scheme: light dark;
 
   /* --- type --- */
-  --font: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
+  --font: 'Manrope', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
     'Helvetica Neue', Arial, sans-serif;
+  /* Editorial serif for display headings + the wordmark (keynote vibe). */
+  --font-display: 'Cormorant', 'Times New Roman', Georgia, serif;
 
-  /* --- light theme (apple.com marketing) --- */
-  --bg: #ffffff;
-  --bg-2: #f5f5f7;
+  /* --- light theme (apple.com marketing, softened & cool) --- */
+  --bg: #f4f6fb;
+  --bg-2: #eef1f8;
   --surface: #ffffff;
-  --surface-2: #f5f5f7;
-  --text: #1d1d1f;
-  --text-secondary: #6e6e73;
-  --text-tertiary: #86868b;
-  --border: #d2d2d7;
-  --border-soft: #e8e8ed;
-  --accent: #0071e3;
-  --accent-hover: #0077ed;
-  --accent-press: #006edb;
+  --surface-2: #f2f4f9;
+  --text: #14161c;
+  --text-secondary: #5b6170;
+  --text-tertiary: #878d9c;
+  --border: #d7dbe6;
+  --border-soft: #e6e9f2;
+  --accent: #0a74f0;
+  --accent-hover: #1e82ff;
+  --accent-press: #0064d6;
   --on-accent: #ffffff;
   --danger: #d70015;
   --ok: #1d8a3f;
-  --nav-bg: rgba(255, 255, 255, 0.72);
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
-  --shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
-  --shadow-lg: 0 12px 40px rgba(0, 0, 0, 0.12);
-  --skeleton: linear-gradient(100deg, #ececf0 30%, #f6f6f8 50%, #ececf0 70%);
+  --nav-bg: rgba(255, 255, 255, 0.6);
+  --shadow-sm: 0 1px 2px rgba(19, 24, 40, 0.05);
+  --shadow: 0 8px 30px -12px rgba(19, 24, 40, 0.18);
+  --shadow-lg: 0 24px 60px -20px rgba(19, 24, 40, 0.28);
+  --skeleton: linear-gradient(100deg, #e7eaf3 30%, #f4f6fb 50%, #e7eaf3 70%);
+
+  /* Aurora ambient background (very low opacity so it never fights content). */
+  --aurora-1: rgba(66, 126, 255, 0.72);
+  --aurora-2: rgba(90, 205, 222, 0.58);
+  --aurora-3: rgba(170, 120, 255, 0.62);
+  --grain-opacity: 0.04;
+
+  /* --- glass (theme-adaptive via color-mix on the theme's own tokens) --- */
+  --glass-bg: color-mix(in srgb, var(--surface) 66%, transparent);
+  --glass-2: color-mix(in srgb, var(--surface-2) 62%, transparent);
+  --glass-border: color-mix(in srgb, var(--text) 12%, transparent);
+  --glass-hi: color-mix(in srgb, #ffffff 60%, transparent);
+  --glass-blur: 22px;
 
   /* --- scale --- */
   --radius-sm: 8px;
   --radius: 12px;
   --radius-lg: 18px;
+  --radius-xl: 26px;
   --radius-pill: 980px;
   --ease: cubic-bezier(0.4, 0, 0.2, 1);
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
 
   font-family: var(--font);
   color: var(--text);
@@ -48,50 +65,60 @@
    ThemeToggle. A manual choice always wins over the system preference. */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme='light']) {
-    --bg: #000000;
-    --bg-2: #101012;
-    --surface: #1d1d1f;
-    --surface-2: #2c2c2e;
-    --text: #f5f5f7;
-    --text-secondary: #a1a1a6;
-    --text-tertiary: #86868b;
-    --border: #38383a;
-    --border-soft: #2a2a2c;
-    --accent: #0a84ff;
-    --accent-hover: #409cff;
-    --accent-press: #0071e3;
+    --bg: #080a0f;
+    --bg-2: #0d1017;
+    --surface: #161a22;
+    --surface-2: #1e232d;
+    --text: #f2f4f8;
+    --text-secondary: #a2a9b8;
+    --text-tertiary: #767d8c;
+    --border: #2b313d;
+    --border-soft: #222834;
+    --accent: #3d9bff;
+    --accent-hover: #5aabff;
+    --accent-press: #2b86ff;
     --on-accent: #ffffff;
     --danger: #ff453a;
     --ok: #30d158;
-    --nav-bg: rgba(0, 0, 0, 0.7);
-    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
-    --shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
-    --shadow-lg: 0 12px 40px rgba(0, 0, 0, 0.6);
-    --skeleton: linear-gradient(100deg, #2a2a2c 30%, #3a3a3c 50%, #2a2a2c 70%);
+    --nav-bg: rgba(10, 13, 20, 0.55);
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.5);
+    --shadow: 0 10px 34px -12px rgba(0, 0, 0, 0.7);
+    --shadow-lg: 0 28px 64px -20px rgba(0, 0, 0, 0.8);
+    --skeleton: linear-gradient(100deg, #1c212b 30%, #262c38 50%, #1c212b 70%);
+    --aurora-1: rgba(52, 112, 255, 0.62);
+    --aurora-2: rgba(34, 196, 214, 0.42);
+    --aurora-3: rgba(146, 100, 246, 0.6);
+    --grain-opacity: 0.06;
+    --glass-hi: color-mix(in srgb, #ffffff 22%, transparent);
   }
 }
 
 :root[data-theme='dark'] {
-  --bg: #000000;
-  --bg-2: #101012;
-  --surface: #1d1d1f;
-  --surface-2: #2c2c2e;
-  --text: #f5f5f7;
-  --text-secondary: #a1a1a6;
-  --text-tertiary: #86868b;
-  --border: #38383a;
-  --border-soft: #2a2a2c;
-  --accent: #0a84ff;
-  --accent-hover: #409cff;
-  --accent-press: #0071e3;
+  --bg: #080a0f;
+  --bg-2: #0d1017;
+  --surface: #161a22;
+  --surface-2: #1e232d;
+  --text: #f2f4f8;
+  --text-secondary: #a2a9b8;
+  --text-tertiary: #767d8c;
+  --border: #2b313d;
+  --border-soft: #222834;
+  --accent: #3d9bff;
+  --accent-hover: #5aabff;
+  --accent-press: #2b86ff;
   --on-accent: #ffffff;
   --danger: #ff453a;
   --ok: #30d158;
-  --nav-bg: rgba(0, 0, 0, 0.7);
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
-  --shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
-  --shadow-lg: 0 12px 40px rgba(0, 0, 0, 0.6);
-  --skeleton: linear-gradient(100deg, #2a2a2c 30%, #3a3a3c 50%, #2a2a2c 70%);
+  --nav-bg: rgba(10, 13, 20, 0.55);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.5);
+  --shadow: 0 10px 34px -12px rgba(0, 0, 0, 0.7);
+  --shadow-lg: 0 28px 64px -20px rgba(0, 0, 0, 0.8);
+  --skeleton: linear-gradient(100deg, #1c212b 30%, #262c38 50%, #1c212b 70%);
+  --aurora-1: rgba(60, 120, 255, 0.3);
+  --aurora-2: rgba(40, 190, 200, 0.22);
+  --aurora-3: rgba(150, 90, 240, 0.26);
+  --grain-opacity: 0.05;
+  --glass-hi: color-mix(in srgb, #ffffff 22%, transparent);
 }
 
 * {
@@ -102,13 +129,29 @@ html {
   scroll-behavior: smooth;
 }
 
+/* Ambient aurora + film grain baked straight into the body background (one
+   fixed layer stack — robust, no z-index games): grain tile on top, soft aurora
+   blobs, base gradient at the bottom. Glass surfaces refract the aurora via
+   their backdrop-filter. Purely decorative. */
 body {
   margin: 0;
   min-height: 100dvh;
-  background: var(--bg);
   color: var(--text);
   font-size: 16px;
   line-height: 1.5;
+  background-color: var(--bg);
+  background-image:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.05'/%3E%3C/svg%3E"),
+    radial-gradient(48% 52% at 12% 4%, var(--aurora-1), transparent 66%),
+    radial-gradient(46% 50% at 90% 2%, var(--aurora-3), transparent 66%),
+    radial-gradient(54% 56% at 52% 40%, var(--aurora-2), transparent 68%),
+    radial-gradient(50% 54% at 88% 76%, var(--aurora-3), transparent 68%),
+    radial-gradient(50% 54% at 8% 90%, var(--aurora-1), transparent 68%),
+    linear-gradient(180deg, var(--bg) 0%, var(--bg-2) 100%);
+  background-repeat: repeat, no-repeat, no-repeat, no-repeat, no-repeat, no-repeat,
+    no-repeat;
+  background-size: 160px 160px, auto, auto, auto, auto, auto, auto;
+  background-attachment: fixed;
 }
 
 h1,
@@ -116,6 +159,13 @@ h2,
 h3 {
   letter-spacing: -0.02em;
   line-height: 1.1;
+}
+
+/* Editorial serif display for top-level headings + wordmark. */
+h1 {
+  font-family: var(--font-display);
+  font-weight: 600;
+  letter-spacing: 0;
 }
 
 button {
