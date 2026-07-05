@@ -58,7 +58,12 @@ def to_svg(
 
         path_d = _region_path(mask)
         if path_d:
-            outlines.add(dwg.path(d=path_d, fill_rule="evenodd"))
+            path = dwg.path(d=path_d, fill_rule="evenodd")
+            # Per-color hooks so the UI can highlight one number's regions: a
+            # stable class and the region's own colour as a CSS custom property.
+            path["class"] = f"rg rg-{entry.index}"
+            path["style"] = f"--rc:{entry.hex}"
+            outlines.add(path)
 
         n, comp, stats, _ = cv2.connectedComponentsWithStats(mask, connectivity=4)
         for c in range(1, n):

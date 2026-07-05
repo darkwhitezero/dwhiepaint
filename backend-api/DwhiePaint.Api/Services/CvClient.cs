@@ -25,9 +25,9 @@ public class CvClient(HttpClient http)
     }
 
     /// <summary>Enqueue an async segmentation job; returns its job id.</summary>
-    public async Task<string> EnqueueSegmentAsync(string imageId, int k, CancellationToken ct)
+    public async Task<string> EnqueueSegmentAsync(string imageId, int k, string? detail, CancellationToken ct)
     {
-        var payload = JsonSerializer.Serialize(new { image_id = imageId, k });
+        var payload = JsonSerializer.Serialize(new { image_id = imageId, k, detail });
         using var content = new StringContent(payload, Encoding.UTF8, "application/json");
         using var resp = await http.PostAsync("/jobs", content, ct);
         var node = await ReadJsonAsync(resp, ct);

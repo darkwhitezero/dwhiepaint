@@ -15,7 +15,7 @@ namespace DwhiePaint.Api.Endpoints;
 /// </summary>
 public static class PaintingEndpoints
 {
-    public record ColorsRequest(int K);
+    public record ColorsRequest(int K, string? Detail = null);
 
     public static IEndpointRouteBuilder MapPaintingEndpoints(this IEndpointRouteBuilder app)
     {
@@ -97,7 +97,7 @@ public static class PaintingEndpoints
         var painting = await OwnedPainting(db, id, principal.GetUserId(), ct);
         if (painting is null) return Results.NotFound();
 
-        var jobId = await cv.EnqueueSegmentAsync(id.ToString(), body.K, ct);
+        var jobId = await cv.EnqueueSegmentAsync(id.ToString(), body.K, body.Detail, ct);
         painting.JobId = jobId;
         painting.Status = PaintingStatus.Processing;
         await db.SaveChangesAsync(ct);

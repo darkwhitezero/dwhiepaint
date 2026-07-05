@@ -152,13 +152,19 @@ export async function uploadImage(file: File): Promise<AnalyzeResult> {
   )
 }
 
+export type DetailPreset = 'beginner' | 'standard' | 'detailed'
+
 // Enqueue an async segmentation job; poll getSegmentStatus for progress/result.
-export async function startSegment(imageId: string, k: number): Promise<{ job_id: string }> {
+export async function startSegment(
+  imageId: string,
+  k: number,
+  detail?: DetailPreset,
+): Promise<{ job_id: string }> {
   return handleAuthed(
     await fetch(`${API_BASE_URL}/api/paintings/${imageId}/segment`, {
       method: 'POST',
       headers: authHeaders({ 'Content-Type': 'application/json' }),
-      body: JSON.stringify({ k }),
+      body: JSON.stringify({ k, detail }),
     }),
   )
 }

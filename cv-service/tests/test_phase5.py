@@ -64,3 +64,6 @@ def test_to_svg_is_wellformed_and_covers_present_colors():
     assert "viewBox" in svg or "viewbox" in svg.lower()
     # Two colors present → at least two region paths.
     assert svg.count("<path") >= 2
+    # Per-color highlight hooks: class + the region's own colour as a CSS var.
+    assert 'rg-1' in svg and 'rg-2' in svg
+    assert '--rc:#123456' in svg

@@ -1,18 +1,19 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
-  assetUrl,
   exportBlob,
   getSegmentStatus,
   startSegment,
   triggerDownload,
   uploadImage,
   validateImageFile,
+  type DetailPreset,
   type ExportFormat,
   type SegmentResult,
   type SegmentStage,
 } from './api'
-import { Legend } from './Legend'
+import { PalettePanel } from './PalettePanel'
 import { ProgressBar } from './ProgressBar'
+import { ResultViewer } from './ResultViewer'
 import { SegmentedControl } from './SegmentedControl'
 import { useToast } from './Toast'
 
@@ -35,7 +36,9 @@ export function Editor({ onSaved }: { onSaved: () => void }) {
   const [imageId, setImageId] = useState<string | null>(null)
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
   const [k, setK] = useState(16)
+  const [detail, setDetail] = useState<DetailPreset>('standard')
   const [seg, setSeg] = useState<SegmentResult | null>(null)
+  const [activeColor, setActiveColor] = useState<number | null>(null)
   const [progress, setProgress] = useState<Progress | null>(null)
   const [busy, setBusy] = useState<'idle' | 'analyzing' | 'segmenting' | 'exporting'>('idle')
   const [error, setError] = useState<string | null>(null)
@@ -45,7 +48,9 @@ export function Editor({ onSaved }: { onSaved: () => void }) {
   const [dragActive, setDragActive] = useState(false)
 
   const didInitialSegment = useRef(false)
-  const lastSegmentedK = useRef<number | null>(null)
+  // Signature of the last segmentation (k + detail) so the debounce effect only
+  // re-runs when one of them actually changes.
+  const lastSegmentedSig = useRef<string | null>(null)
   const localPreviewRef = useRef<string | null>(null)
   // Bumped to supersede an in-flight poll loop (new k, new file, or unmount).
   const segRun = useRef(0)
@@ -78,11 +83,12 @@ export function Editor({ onSaved }: { onSaved: () => void }) {
     setFile(f)
     setImageId(null)
     setSeg(null)
+    setActiveColor(null)
     setProgress(null)
     setPreviewUrl(null)
     setError(null)
     didInitialSegment.current = false
-    lastSegmentedK.current = null
+    lastSegmentedSig.current = null
     setPreviewFor(f)
   }
 
@@ -98,14 +104,14 @@ export function Editor({ onSaved }: { onSaved: () => void }) {
   // supersede an older poll loop so stale results never land. Returns whether
   // segmentation completed successfully.
   const runSegment = useCallback(
-    async (id: string, colors: number): Promise<boolean> => {
+    async (id: string, colors: number, preset: DetailPreset): Promise<boolean> => {
       const myRun = ++segRun.current
       const current = () => segRun.current === myRun
       setBusy('segmenting')
       setError(null)
       setProgress({ stage: 'queued', value: 0 })
       try {
-        await startSegment(id, colors)
+        await startSegment(id, colors, preset)
         for (;;) {
           if (!current()) return false // superseded
           const st = await getSegmentStatus(id)
@@ -119,7 +125,8 @@ export function Editor({ onSaved }: { onSaved: () => void }) {
               svg_url: st.svg_url,
               k: st.k ?? colors,
             })
-            lastSegmentedK.current = colors
+            lastSegmentedSig.current = `${colors}|${preset}`
+            setActiveColor(null)
             setProgress(null)
             setBusy('idle')
             return true
@@ -154,9 +161,9 @@ export function Editor({ onSaved }: { onSaved: () => void }) {
       setPreviewUrl(res.preview_url)
       setK(res.predicted_k)
       didInitialSegment.current = true
-      // Mark this k as handled so the debounce effect doesn't double-segment.
-      lastSegmentedK.current = res.predicted_k
-      const ok = await runSegment(res.image_id, res.predicted_k)
+      // Mark this signature as handled so the debounce effect doesn't double-segment.
+      lastSegmentedSig.current = `${res.predicted_k}|${detail}`
+      const ok = await runSegment(res.image_id, res.predicted_k, detail)
       onSaved() // refresh history regardless — the painting row exists now
       if (ok) toast.success('Раскраска создана')
     } catch (e) {
@@ -186,13 +193,14 @@ export function Editor({ onSaved }: { onSaved: () => void }) {
     }
   }
 
-  // Re-segment (debounced) whenever the user changes k after the first pass.
+  // Re-segment (debounced) whenever k or the detail preset changes after the
+  // first pass.
   useEffect(() => {
     if (!imageId || !didInitialSegment.current) return
-    if (lastSegmentedK.current === k) return
-    const t = setTimeout(() => runSegment(imageId, k), 400)
+    if (lastSegmentedSig.current === `${k}|${detail}`) return
+    const t = setTimeout(() => runSegment(imageId, k, detail), 400)
     return () => clearTimeout(t)
-  }, [k, imageId, runSegment])
+  }, [k, detail, imageId, runSegment])
 
   return (
     <div className="editor">
@@ -274,6 +282,20 @@ export function Editor({ onSaved }: { onSaved: () => void }) {
               />
             </div>
 
+            <div className="control">
+              <span className="control-label">Детализация</span>
+              <SegmentedControl
+                ariaLabel="Уровень детализации"
+                value={detail}
+                onChange={setDetail}
+                options={[
+                  { value: 'beginner', label: 'Новичок' },
+                  { value: 'standard', label: 'Стандарт' },
+                  { value: 'detailed', label: 'Детально' },
+                ]}
+              />
+            </div>
+
             {busy === 'segmenting' && progress && (
               <ProgressBar progress={progress.value} stage={progress.stage} />
             )}
@@ -328,28 +350,27 @@ export function Editor({ onSaved }: { onSaved: () => void }) {
             </button>
           </div>
 
-          <div className="result">
-            <figure>
-              <figcaption>Оригинал</figcaption>
-              {previewUrl && <img src={assetUrl(previewUrl)} alt="Оригинал" />}
-            </figure>
-            <figure>
-              <figcaption>Раскраска</figcaption>
+          <div className="result-area">
+            {seg && previewUrl ? (
+              <ResultViewer
+                originalUrl={previewUrl}
+                paintedUrl={seg.painted_preview_url}
+                svgUrl={seg.svg_url}
+                activeColor={activeColor}
+              />
+            ) : (
               <div className="result-canvas">
-                {seg && (
-                  <img
-                    key={seg.region_map_url}
-                    className={`result-art${busy === 'segmenting' ? ' is-loading' : ''}`}
-                    src={assetUrl(seg.region_map_url)}
-                    alt="Раскраска по номерам"
-                  />
-                )}
-                {(!seg || busy === 'segmenting') && <div className="skeleton" aria-hidden="true" />}
+                <div className="skeleton" aria-hidden="true" />
               </div>
-            </figure>
+            )}
+            {seg && (
+              <PalettePanel
+                palette={seg.palette}
+                activeColor={activeColor}
+                onSelect={setActiveColor}
+              />
+            )}
           </div>
-
-          {seg && <Legend palette={seg.palette} />}
         </div>
       )}
     </div>
