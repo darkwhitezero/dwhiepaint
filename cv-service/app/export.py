@@ -16,7 +16,7 @@ import cairosvg
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 
-from . import config, render, vectorize
+from . import config, paints, render, vectorize
 from .cache import ImageEntry, PaletteEntry
 
 Rect = tuple[int, int, int, int]  # x, y, w, h
@@ -127,6 +127,106 @@ def compose_png(entry: ImageEntry, page_size: str = "A4") -> bytes:
     return buf.getvalue()
 
 
+def compose_tiled(entry: ImageEntry, page_size: str = "A4", grid: int = 2,
+                  include_legend: bool = True) -> bytes:
+    """Tiled printing: the coloring artwork spread across grid×grid sheets.
+
+    Big canvases don't fit one A4, so the vector artwork is rasterized across a
+    canvas ``grid`` sheets wide/tall (with a shared overlap band for gluing) and
+    split into per-sheet pages, each with corner crop marks and a "row-col"
+    label. A first "assembly map" page shows the whole picture with the grid and
+    tile numbers so the sheets are easy to lay out. Optional legend page last.
+    """
+    seg = entry.segmentation
+    if seg is None:
+        raise ValueError("image has not been segmented yet")
+    grid = max(1, min(grid, 4))
+
+    page_w, page_h = _page_dimensions(page_size, landscape=False)
+    md = min(page_w, page_h)
+    margin = round(md * 0.04)
+    overlap = round(md * 0.03)
+    usable_w, usable_h = page_w - 2 * margin, page_h - 2 * margin
+
+    total_w = usable_w * grid - overlap * (grid - 1)
+    total_h = usable_h * grid - overlap * (grid - 1)
+
+    src_h, src_w = seg.label_img.shape
+    scale = min(total_w / src_w, total_h / src_h)
+    aw, ah = max(1, round(src_w * scale)), max(1, round(src_h * scale))
+    svg = vectorize.to_svg(seg.label_img, seg.palette, min_label_radius=6.0,
+                           stroke_px=max(1.0, min(src_h, src_w) * 0.0016))
+    art = Image.open(io.BytesIO(
+        cairosvg.svg2png(bytestring=svg.encode("utf-8"), output_width=aw, output_height=ah)
+    )).convert("RGB")
+    canvas = Image.new("RGB", (total_w, total_h), "white")
+    canvas.paste(art, ((total_w - aw) // 2, (total_h - ah) // 2))
+
+    pages = [_tile_map_page(seg, page_w, page_h, grid)]
+    step_w, step_h = usable_w - overlap, usable_h - overlap
+    label_font = _load_font(config.FONT_PATH, round(md * 0.02))
+    for r in range(grid):
+        for c in range(grid):
+            crop = canvas.crop((c * step_w, r * step_h,
+                                c * step_w + usable_w, r * step_h + usable_h))
+            page = Image.new("RGB", (page_w, page_h), "white")
+            page.paste(crop, (margin, margin))
+            draw = ImageDraw.Draw(page)
+            _draw_crop_marks(draw, margin, margin, usable_w, usable_h, md)
+            draw.text((margin, page_h - round(margin * 0.75)),
+                      f"Лист {r + 1}-{c + 1}  ·  ряд {r + 1}, столбец {c + 1}",
+                      fill=(120, 120, 120), font=label_font)
+            pages.append(page)
+
+    if include_legend:
+        pages.append(_legend_page(seg.palette, page_w, page_h))
+
+    buf = io.BytesIO()
+    pages[0].save(buf, format="PDF", resolution=float(DPI),
+                  save_all=True, append_images=pages[1:])
+    return buf.getvalue()
+
+
+def _tile_map_page(seg, page_w: int, page_h: int, grid: int) -> Image.Image:
+    page = Image.new("RGB", (page_w, page_h), "white")
+    draw = ImageDraw.Draw(page)
+    md = min(page_w, page_h)
+    margin = round(md * 0.05)
+
+    draw.text((margin, margin), f"Схема сборки — {grid}×{grid} листов",
+              fill="black", font=_load_font(config.FONT_PATH_BOLD, round(md * 0.028)))
+    top = margin + round(md * 0.05)
+
+    painted = render.painted_preview(seg.label_img, seg.palette)
+    im = Image.fromarray(painted.astype("uint8")).convert("RGB")
+    area_w, area_h = page_w - 2 * margin, page_h - top - margin
+    im.thumbnail((area_w, area_h), Image.LANCZOS)
+    ox, oy = margin + (area_w - im.width) // 2, top + (area_h - im.height) // 2
+    page.paste(im, (ox, oy))
+
+    line_w = max(1, round(md * 0.0025))
+    for i in range(grid + 1):
+        x = ox + round(im.width * i / grid)
+        y = oy + round(im.height * i / grid)
+        draw.line([(x, oy), (x, oy + im.height)], fill=(20, 20, 20), width=line_w)
+        draw.line([(ox, y), (ox + im.width, y)], fill=(20, 20, 20), width=line_w)
+    lf = _load_font(config.FONT_PATH_BOLD, round(md * 0.022))
+    for r in range(grid):
+        for c in range(grid):
+            cx = ox + round(im.width * (c + 0.5) / grid)
+            cy = oy + round(im.height * (r + 0.5) / grid)
+            draw.text((cx, cy), f"{r + 1}-{c + 1}", fill=(230, 40, 40), font=lf, anchor="mm")
+    return page
+
+
+def _draw_crop_marks(draw: ImageDraw.ImageDraw, x: int, y: int, w: int, h: int, md: int) -> None:
+    m = round(md * 0.022)
+    wdt = max(1, round(md * 0.0025))
+    for cx, cy, dx, dy in [(x, y, 1, 1), (x + w, y, -1, 1), (x, y + h, 1, -1), (x + w, y + h, -1, -1)]:
+        draw.line([(cx, cy), (cx + dx * m, cy)], fill=(0, 0, 0), width=wdt)
+        draw.line([(cx, cy), (cx, cy + dy * m)], fill=(0, 0, 0), width=wdt)
+
+
 def _coloring_page(entry: ImageEntry, seg, page_w: int, page_h: int) -> Image.Image:
     min_dim = min(page_w, page_h)
     margin = round(min_dim * 0.04)
@@ -186,7 +286,7 @@ def _legend_page(palette: list[PaletteEntry], page_w: int, page_h: int) -> Image
     sub_font = _load_font(config.FONT_PATH, round(min_dim * 0.017))
     draw.text((margin, margin), "Цвета", fill="black", font=title_font)
     sub_y = margin + round(min_dim * 0.028) + round(margin * 0.2)
-    draw.text((margin, sub_y), "Номер → ближайший цвет краски",
+    draw.text((margin, sub_y), f"Номер → краска из набора «{paints.set_name()}»",
               fill=(120, 120, 120), font=sub_font)
 
     top = sub_y + round(min_dim * 0.017) + margin
@@ -248,4 +348,10 @@ def _draw_legend(draw: ImageDraw.ImageDraw, palette: list[PaletteEntry],
         max_w = col_w - swatch - pad * 2
         name = _fit_text(font, f"{c.index}. {c.name_ru}", max_w)
         draw.text((text_x, sy), name, fill="black", font=font)
-        draw.text((text_x, sy + swatch * 0.55), c.hex, fill=(130, 130, 130), font=hex_font)
+
+        info = paints.describe(c.lab)
+        paint_txt = (
+            "смешать: " + " + ".join(info["mix"]) if info.get("mix") else "≈ " + info["paint_name"]
+        )
+        draw.text((text_x, sy + swatch * 0.52), _fit_text(hex_font, paint_txt, max_w),
+                  fill=(90, 90, 90), font=hex_font)

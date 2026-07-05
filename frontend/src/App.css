@@ -699,6 +699,13 @@
   color: var(--text-tertiary);
   font-variant-numeric: tabular-nums;
 }
+.palette-paint {
+  font-size: 0.74rem;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 @media (max-width: 900px) {
   .result-area {
     grid-template-columns: 1fr;

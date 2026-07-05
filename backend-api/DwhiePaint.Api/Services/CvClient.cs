@@ -50,7 +50,7 @@ public class CvClient(HttpClient http)
     }
 
     public async Task<(byte[] Bytes, string ContentType)> ExportAsync(
-        string imageId, string pageSize, bool includeLegend, string format, CancellationToken ct)
+        string imageId, string pageSize, bool includeLegend, string format, int tiles, CancellationToken ct)
     {
         var payload = JsonSerializer.Serialize(new
         {
@@ -58,6 +58,7 @@ public class CvClient(HttpClient http)
             page_size = pageSize,
             include_legend = includeLegend,
             format,
+            tiles,
         });
         using var content = new StringContent(payload, Encoding.UTF8, "application/json");
         using var resp = await http.PostAsync("/export", content, ct);

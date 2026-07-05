@@ -26,6 +26,7 @@ from typing import Any
 from arq.connections import RedisSettings
 
 from . import config
+from . import paints as paints_mod
 from . import segment as segment_mod
 from .cache import load_entry
 
@@ -40,16 +41,20 @@ def job_key(job_id: str) -> str:
 
 
 def _serialize_palette(seg) -> list[dict]:
-    return [
-        {
+    out = []
+    for c in seg.palette:
+        entry = {
             "index": c.index,
             "hex": c.hex,
             "lab": list(c.lab),
             "name_ru": c.name_ru,
             "name_en": c.name_en,
         }
-        for c in seg.palette
-    ]
+        # Nearest real acrylic paint (+ mixing hint) — extra fields the backend
+        # ignores when persisting but the UI shows for physical painting.
+        entry["paint"] = paints_mod.describe(c.lab)
+        out.append(entry)
+    return out
 
 
 async def run_segment(

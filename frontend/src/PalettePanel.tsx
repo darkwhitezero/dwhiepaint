@@ -56,7 +56,15 @@ export function PalettePanel({
                 </span>
                 <span className="palette-meta">
                   <span className="palette-name">{c.name_ru}</span>
-                  <span className="palette-hex">{c.hex}</span>
+                  {c.paint ? (
+                    <span className="palette-paint">
+                      {c.paint.mix
+                        ? `смешать: ${c.paint.mix.join(' + ')}`
+                        : `≈ ${c.paint.paint_name}`}
+                    </span>
+                  ) : (
+                    <span className="palette-hex">{c.hex}</span>
+                  )}
                 </span>
               </button>
             </li>

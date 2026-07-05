@@ -44,6 +44,7 @@ class ExportRequest(BaseModel):
     page_size: str = "A4"
     include_legend: bool = True
     format: str = "pdf"
+    tiles: int = 1
 
 
 class PaletteColor(BaseModel):
@@ -149,7 +150,10 @@ def export(req: ExportRequest):
         png = export_mod.compose_png(entry, req.page_size)
         return Response(content=png, media_type="image/png")
     if fmt == "pdf":
-        pdf = export_mod.compose_export(entry, req.page_size, req.include_legend)
+        if req.tiles > 1:
+            pdf = export_mod.compose_tiled(entry, req.page_size, req.tiles, req.include_legend)
+        else:
+            pdf = export_mod.compose_export(entry, req.page_size, req.include_legend)
         return Response(content=pdf, media_type="application/pdf")
     if fmt == "svg":
         return Response(content=export_mod.export_svg(entry), media_type="image/svg+xml")

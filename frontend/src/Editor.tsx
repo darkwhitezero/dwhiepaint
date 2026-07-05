@@ -44,6 +44,7 @@ export function Editor({ onSaved }: { onSaved: () => void }) {
   const [error, setError] = useState<string | null>(null)
   const [pageSize, setPageSize] = useState('A4')
   const [format, setFormat] = useState<ExportFormat>('pdf')
+  const [tiles, setTiles] = useState(1)
   const [includeLegend, setIncludeLegend] = useState(true)
   const [dragActive, setDragActive] = useState(false)
 
@@ -180,8 +181,10 @@ export function Editor({ onSaved }: { onSaved: () => void }) {
     setError(null)
     try {
       const withLegend = (format === 'pdf' || format === 'zip') && includeLegend
-      const blob = await exportBlob(imageId, pageSize, withLegend, format)
-      triggerDownload(blob, `dwhiepaint-${pageSize}.${format}`)
+      const t = format === 'pdf' ? tiles : 1
+      const blob = await exportBlob(imageId, pageSize, withLegend, format, t)
+      const suffix = t > 1 ? `-${t}x${t}` : ''
+      triggerDownload(blob, `dwhiepaint-${pageSize}${suffix}.${format}`)
       onSaved()
       toast.success(`${format.toUpperCase()} готов к печати`)
     } catch (e) {
@@ -327,6 +330,22 @@ export function Editor({ onSaved }: { onSaved: () => void }) {
                 ]}
               />
             </div>
+
+            {format === 'pdf' && (
+              <div className="control">
+                <span className="control-label">Плитка (крупный холст)</span>
+                <SegmentedControl
+                  ariaLabel="Разбить на листы"
+                  value={String(tiles)}
+                  onChange={(v) => setTiles(Number(v))}
+                  options={[
+                    { value: '1', label: '1 лист' },
+                    { value: '2', label: '2×2' },
+                    { value: '3', label: '3×3' },
+                  ]}
+                />
+              </div>
+            )}
 
             {(format === 'pdf' || format === 'zip') && (
               <label className="switch">

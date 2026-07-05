@@ -16,12 +16,19 @@ function authHeaders(extra?: Record<string, string>): Record<string, string> {
   return { ...(extra ?? {}), ...(token ? { Authorization: `Bearer ${token}` } : {}) }
 }
 
+export interface PaintMatch {
+  paint_name: string
+  paint_hex: string
+  delta_e: number
+  mix?: string[]
+}
 export interface PaletteColor {
   index: number
   hex: string
   lab: number[]
   name_ru: string
   name_en: string | null
+  paint?: PaintMatch
 }
 export interface AnalyzeResult {
   image_id: string
@@ -193,11 +200,13 @@ export async function exportBlob(
   pageSize: string,
   includeLegend: boolean,
   format: ExportFormat,
+  tiles = 1,
 ): Promise<Blob> {
   const q = new URLSearchParams({
     pageSize,
     includeLegend: String(includeLegend),
     format,
+    tiles: String(tiles),
   })
   return fetchBlob(`${API_BASE_URL}/api/paintings/${imageId}/export?${q}`)
 }
