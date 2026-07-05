@@ -38,9 +38,18 @@ AUTO_K_SIL_SAMPLE = int(os.getenv("AUTO_K_SIL_SAMPLE", "3000"))
 # penalty (too many post-merge regions) vs. dominance penalty (one region
 # swallowing most of the image = under-segmentation).
 AUTO_K_W_SILHOUETTE = float(os.getenv("AUTO_K_W_SILHOUETTE", "1.0"))
-AUTO_K_W_FRAGMENTATION = float(os.getenv("AUTO_K_W_FRAGMENTATION", "0.6"))
+# Softened vs. the MVP: subject-aware min-area (Phase 7) cleans up the
+# background, so tolerating more regions no longer means a noisy result — it
+# lets auto-k pick enough colors to keep subject detail (eyes, text, stars).
+AUTO_K_W_FRAGMENTATION = float(os.getenv("AUTO_K_W_FRAGMENTATION", "0.45"))
 AUTO_K_W_DOMINANCE = float(os.getenv("AUTO_K_W_DOMINANCE", "0.6"))
-AUTO_K_TARGET_REGIONS = int(os.getenv("AUTO_K_TARGET_REGIONS", "40"))  # comfortable paintable-region count
+AUTO_K_TARGET_REGIONS = int(os.getenv("AUTO_K_TARGET_REGIONS", "64"))  # comfortable paintable-region count
+# Silhouette separation falls monotonically with k, so on its own auto-k always
+# picks the fewest colors and starves fine detail (eyes, text, stars). This term
+# rewards reaching the target paintable-region count, so k rises until the image
+# is richly segmented, then the fragmentation penalty above target reins it in —
+# giving a peak near TARGET_REGIONS instead of a floor at MIN_K.
+AUTO_K_W_DETAIL = float(os.getenv("AUTO_K_W_DETAIL", "0.55"))
 AUTO_K_DOMINANCE_THRESHOLD = float(os.getenv("AUTO_K_DOMINANCE_THRESHOLD", "0.6"))  # top region area fraction
 
 # --- edge-aware superpixel segmentation (Phase 5) ---------------------------
@@ -94,6 +103,49 @@ CONTOUR_SMOOTH_ITERS = int(os.getenv("CONTOUR_SMOOTH_ITERS", "0"))
 # rounds superpixel-seam staircases while keeping labels discrete AND shared
 # boundaries consistent (one boundary, not two). Sigma in px at working res.
 LABEL_SMOOTH_SIGMA = float(os.getenv("LABEL_SMOOTH_SIGMA", "2.5"))
+
+# --- subject-aware detail (Phase 7) -----------------------------------------
+# Small high-frequency details (eyes, text, stars) get merged away and their
+# colors quantized out. A per-pixel importance map — high-contrast edges + the
+# rembg subject alpha + face boxes — spatially modulates the minimum paintable
+# region size, so detail survives where it matters while flat background is
+# aggressively simplified. Master switch; when off the pipeline is uniform.
+SUBJECT_AWARE = os.getenv("SUBJECT_AWARE", "1") not in ("0", "false", "False")
+REMBG_MODEL = os.getenv("REMBG_MODEL", "u2net")
+# Skip matting on images too small to be worth it (short side, px at working res).
+SUBJECT_MIN_SIDE = int(os.getenv("SUBJECT_MIN_SIDE", "320"))
+# Run rembg on a copy no larger than this (u2net is 320px internally anyway);
+# the soft mask is upscaled back. Keeps matting fast on big working images.
+REMBG_MAX_SIDE = int(os.getenv("REMBG_MAX_SIDE", "1024"))
+
+# Importance map composition. Baseline everywhere is FLOOR; edges and subject
+# add on top, faces get a flat boost. Values are roughly in [FLOOR, ~2].
+IMPORTANCE_FLOOR = float(os.getenv("IMPORTANCE_FLOOR", "0.15"))
+IMPORTANCE_W_EDGE = float(os.getenv("IMPORTANCE_W_EDGE", "0.85"))
+IMPORTANCE_W_SUBJECT = float(os.getenv("IMPORTANCE_W_SUBJECT", "0.6"))
+IMPORTANCE_FACE_BOOST = float(os.getenv("IMPORTANCE_FACE_BOOST", "0.7"))
+# How wide (fraction of short side) a thin edge is dilated into a protected band.
+IMPORTANCE_EDGE_DILATE_FRAC = float(os.getenv("IMPORTANCE_EDGE_DILATE_FRAC", "0.004"))
+# When a subject is found, damp edge saliency OUTSIDE it so a genuinely busy
+# background doesn't steal the whole detail budget. Kept low so high-contrast
+# background decorations (stars, hearts, text) still survive — only flat
+# background is simplified (0 = no damping, 1 = full).
+IMPORTANCE_BG_EDGE_DAMP = float(os.getenv("IMPORTANCE_BG_EDGE_DAMP", "0.2"))
+
+# Map per-region mean importance in [LOW, HIGH] to an ABSOLUTE minimum paintable
+# area: low importance → the preset's (large) base area, so flat background
+# collapses into big clean regions; high importance → DETAIL_PX, so small
+# details (eyes, decorations) survive. DETAIL_PX also acts as the floor that
+# still merges sub-detail sparkle noise. Decoupling from a multiplier of the
+# large base is what lets both the subject AND crisp background marks survive.
+IMPORTANCE_LOW = float(os.getenv("IMPORTANCE_LOW", "0.2"))
+IMPORTANCE_HIGH = float(os.getenv("IMPORTANCE_HIGH", "1.0"))
+MIN_AREA_DETAIL_PX = int(os.getenv("MIN_AREA_DETAIL_PX", "130"))
+MIN_AREA_HARD_FLOOR = int(os.getenv("MIN_AREA_HARD_FLOOR", "40"))
+
+# Upscale small inputs to at least this longest side (px) before processing, so
+# tiny photos still have the resolution to carry paintable detail.
+UPSCALE_MIN_SIDE = int(os.getenv("UPSCALE_MIN_SIDE", "1400"))
 
 COLOR_DICTIONARY_PATH = DATA_DIR / "colors.json"
 

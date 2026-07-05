@@ -11,9 +11,10 @@ images from ``preview.png`` and writes rendered artifacts where the API's
 
 from __future__ import annotations
 
+import numpy as np
 import redis as redis_sync
 
-from . import config, jobs
+from . import config, jobs, matte
 
 
 async def on_startup(ctx: dict) -> None:
@@ -21,6 +22,13 @@ async def on_startup(ctx: dict) -> None:
     ctx["progress_redis"] = redis_sync.Redis.from_url(
         config.REDIS_URL, decode_responses=True
     )
+    # Warm the rembg session now (cold onnxruntime init is ~30s) so the first
+    # real job doesn't eat that latency. Fails soft if matting is unavailable.
+    if config.SUBJECT_AWARE:
+        try:
+            matte.subject_mask(np.zeros((512, 512, 3), dtype=np.uint8))
+        except Exception:  # noqa: BLE001 — warmup is best-effort
+            pass
 
 
 async def on_shutdown(ctx: dict) -> None:

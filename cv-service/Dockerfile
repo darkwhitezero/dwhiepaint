@@ -14,6 +14,11 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
+# Pre-download the rembg u2net model into the image so the worker never fetches
+# it at runtime (subject/background matting, Phase 7). ~176MB baked in.
+ENV U2NET_HOME=/root/.u2net
+RUN python -c "from rembg import new_session; new_session('u2net')"
+
 COPY app ./app
 COPY data ./data
 

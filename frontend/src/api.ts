@@ -41,6 +41,7 @@ export interface SegmentResult {
 // SegmentResult fields.
 export type SegmentStage =
   | 'queued'
+  | 'subject'
   | 'superpixels'
   | 'merge'
   | 'smooth'

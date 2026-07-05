@@ -27,6 +27,10 @@ def _decode_and_resize(file_bytes: bytes) -> np.ndarray:
     if longest > config.MAX_SIDE:
         scale = config.MAX_SIDE / longest
         img = img.resize((round(w * scale), round(h * scale)), Image.LANCZOS)
+    elif longest < config.UPSCALE_MIN_SIDE:
+        # Upscale small inputs so tiny photos still carry paintable detail.
+        scale = config.UPSCALE_MIN_SIDE / longest
+        img = img.resize((round(w * scale), round(h * scale)), Image.LANCZOS)
 
     rgb = np.asarray(img, dtype=np.uint8)
     # Edge-preserving smoothing: cuts JPEG compression speckle before color
@@ -92,11 +96,15 @@ def _score_candidate(working_lab: np.ndarray, k: int) -> float | None:
         max(0.0, dominant_frac - config.AUTO_K_DOMINANCE_THRESHOLD)
         / (1 - config.AUTO_K_DOMINANCE_THRESHOLD)
     )
+    # Reward approaching the target region count so detail-rich images earn more
+    # colors; capped at 1 so it can't outweigh separation without bound.
+    detail_reward = min(1.0, region_count / config.AUTO_K_TARGET_REGIONS)
 
     return (
         config.AUTO_K_W_SILHOUETTE * silhouette
         - config.AUTO_K_W_FRAGMENTATION * frag_penalty
         - config.AUTO_K_W_DOMINANCE * dom_penalty
+        + config.AUTO_K_W_DETAIL * detail_reward
     )
 
 

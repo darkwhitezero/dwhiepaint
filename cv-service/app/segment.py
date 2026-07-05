@@ -9,7 +9,7 @@ import cv2
 import numpy as np
 from skimage.color import rgb2lab
 
-from . import config, render, storage, superpixels, vectorize
+from . import config, importance, render, storage, superpixels, vectorize
 from .cache import ImageEntry, PaletteEntry, Segmentation
 from .color_naming import name_for_lab
 
@@ -43,9 +43,19 @@ def segment(
     k = int(np.clip(k, config.MIN_K, config.MAX_K))
     h, w = entry.height, entry.width
 
+    # Detail-importance map (subject alpha + edges + faces). It spatially
+    # modulates the minimum paintable region size so small details survive where
+    # they matter (eyes, text, stars) while flat background collapses into clean
+    # regions. Heavy (rembg), so it runs up front under its own stage; None when
+    # subject-aware mode is off, which reduces to a uniform min-area.
+    report("subject", 0.02)
+    imp_map = None
+    if config.SUBJECT_AWARE:
+        imp_map, _ = importance.importance_map(entry.rgb)
+
     # Edge-aware quantization: SLIC superpixels + area-weighted palette k-means
     # (the heaviest single stage — superpixel oversegmentation + clustering).
-    report("superpixels", 0.05)
+    report("superpixels", 0.14)
     labels, centroids = superpixels.quantize(entry.lab, preset["slic_n_segments"], k)
     actual_k = centroids.shape[0]
 
@@ -53,9 +63,14 @@ def segment(
     if actual_k <= 255:
         labels = cv2.medianBlur(labels.astype(np.uint8), 3).astype(np.int32)
 
-    report("merge", 0.5)
+    report("merge", 0.52)
     region_id, region_cluster, areas = connected_regions(labels, actual_k)
-    min_area = max(16, int(preset["min_region_area_frac"] * h * w))
+    base_min_area = max(16, int(preset["min_region_area_frac"] * h * w))
+    min_area = (
+        _region_min_area(region_id, areas, imp_map, base_min_area)
+        if imp_map is not None
+        else base_min_area
+    )
     cleaned = merge_small_regions(
         region_id, region_cluster, areas, min_area, cluster_lab=centroids,
     )
@@ -104,6 +119,30 @@ def _smooth_label_map(labels: np.ndarray, sigma: float) -> np.ndarray:
         best[win] = m[win]
         out[win] = c
     return out
+
+
+def _region_min_area(
+    region_id: np.ndarray,
+    areas: np.ndarray,
+    importance_map: np.ndarray,
+    base_min_area: int,
+) -> np.ndarray:
+    """Per-region minimum paintable area from each region's mean importance.
+
+    High-importance regions (subject / edges / faces) get a small threshold so
+    tiny details survive the merge; low-importance (flat background) gets a large
+    one so noise collapses into big, clean regions. Returns a float array indexed
+    by region id, floored so 1px specks can never survive anywhere.
+    """
+    r = len(areas)
+    imp_sum = np.bincount(region_id.ravel(), weights=importance_map.ravel(), minlength=r)
+    imp_region = imp_sum / np.maximum(areas, 1.0)
+
+    span = max(1e-6, config.IMPORTANCE_HIGH - config.IMPORTANCE_LOW)
+    t = np.clip((imp_region - config.IMPORTANCE_LOW) / span, 0.0, 1.0)
+    # t=0 (flat/background) → base_min_area; t=1 (subject/edges) → DETAIL_PX.
+    out = base_min_area + t * (config.MIN_AREA_DETAIL_PX - base_min_area)
+    return np.maximum(config.MIN_AREA_HARD_FLOOR, out).astype(np.float64)
 
 
 def connected_regions(
@@ -157,10 +196,10 @@ def merge_small_regions(
     region_id: np.ndarray,
     region_cluster: np.ndarray,
     areas: np.ndarray,
-    min_area: int,
+    min_area: int | float | np.ndarray,
     cluster_lab: np.ndarray | None = None,
 ) -> np.ndarray:
-    """Absorb every region below min_area into a well-matched neighbor.
+    """Absorb every region below its minimum area into a well-matched neighbor.
 
     Public (reused by ``analyze._auto_k``). Picking "largest shared border"
     alone can merge a sliver into a visually distant neighbor when two
@@ -170,6 +209,12 @@ def merge_small_regions(
     is discounted by how far the neighbor's color is — among comparable
     borders this prefers the perceptually closer-colored neighbor.
 
+    ``min_area`` may be a scalar (uniform threshold) or a per-region array
+    indexed by region id (Phase 7 subject-aware detail: keep small important
+    regions, merge unimportant ones harder). A merged region inherits the more
+    permissive (smaller) threshold of its members, so a detail sitting next to
+    background isn't merged away on the next pass.
+
     Returns an HxW map of (merged) cluster labels.
     """
     r = len(areas)
@@ -177,6 +222,12 @@ def merge_small_regions(
     size = areas.tolist()
     cluster = region_cluster.tolist()
     adj = _adjacency(region_id, r)
+
+    scalar = np.isscalar(min_area)
+    thr = None if scalar else np.asarray(min_area, dtype=np.float64).copy()
+
+    def region_thr(reg: int) -> float:
+        return float(min_area) if scalar else float(thr[reg])
 
     def neighbor_score(reg: int, n: int, border: int) -> float:
         if cluster_lab is None:
@@ -199,8 +250,10 @@ def merge_small_regions(
         area, reg = heapq.heappop(heap)
         if find(reg) != reg or area != size[reg]:
             continue  # stale entry
-        if area >= min_area:
-            break  # smallest active region already large enough
+        if area >= region_thr(reg):
+            if scalar:
+                break  # smallest active region already large enough → all are
+            continue  # per-region: a larger region may still be below its own
         neighbors = adj.get(reg)
         if not neighbors:
             continue  # isolated region, nothing to merge into
@@ -212,6 +265,8 @@ def merge_small_regions(
 
         parent[reg] = nb
         size[nb] += size[reg]
+        if not scalar:
+            thr[nb] = min(thr[nb], thr[reg])
         for n, border in neighbors.items():
             rn = find(n)
             if rn == nb:

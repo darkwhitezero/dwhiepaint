@@ -27,6 +27,7 @@ services:
 
   cv-service:
     build: ./cv-service
+    image: dwhiepaint-cv:latest
     environment:
       CACHE_TTL_SECONDS: 1800
       CACHE_DIR: /data/cache
@@ -48,7 +49,9 @@ services:
   # Redis and runs the heavy pipeline. Shares the cache volume so the artifacts
   # it renders are served by cv-service's /cache mount.
   worker:
-    build: ./cv-service
+    # Reuse the exact image cv-service builds (same code, different entrypoint) —
+    # a separate build: would produce a second, independently-stale image.
+    image: dwhiepaint-cv:latest
     command: ["arq", "app.worker.WorkerSettings"]
     environment:
       CACHE_DIR: /data/cache
@@ -58,6 +61,8 @@ services:
     depends_on:
       redis:
         condition: service_healthy
+      cv-service:
+        condition: service_started
 
   backend-api:
     build: ./backend-api

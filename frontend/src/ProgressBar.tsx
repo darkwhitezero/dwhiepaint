@@ -2,6 +2,7 @@ import type { SegmentStage } from './api'
 
 const STAGE_LABELS: Record<SegmentStage, string> = {
   queued: 'В очереди…',
+  subject: 'Поиск объекта и лиц',
   superpixels: 'Разбиение на области',
   merge: 'Объединение мелких участков',
   smooth: 'Сглаживание границ',
