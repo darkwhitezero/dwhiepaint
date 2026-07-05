@@ -34,6 +34,8 @@ public class FileStorage
         ".webp" => "image/webp",
         ".gif" => "image/gif",
         ".pdf" => "application/pdf",
+        ".svg" => "image/svg+xml",
+        ".zip" => "application/zip",
         _ => "application/octet-stream",
     };
 
@@ -41,6 +43,8 @@ public class FileStorage
     {
         "application/pdf" => ".pdf",
         "image/png" => ".png",
+        "image/svg+xml" => ".svg",
+        "application/zip" => ".zip",
         _ => ".bin",
     };
 }

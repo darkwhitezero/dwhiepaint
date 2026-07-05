@@ -179,7 +179,7 @@ export function Editor({ onSaved }: { onSaved: () => void }) {
     setBusy('exporting')
     setError(null)
     try {
-      const withLegend = format === 'pdf' && includeLegend
+      const withLegend = (format === 'pdf' || format === 'zip') && includeLegend
       const blob = await exportBlob(imageId, pageSize, withLegend, format)
       triggerDownload(blob, `dwhiepaint-${pageSize}.${format}`)
       onSaved()
@@ -309,6 +309,8 @@ export function Editor({ onSaved }: { onSaved: () => void }) {
                 options={[
                   { value: 'pdf', label: 'PDF' },
                   { value: 'png', label: 'PNG' },
+                  { value: 'svg', label: 'SVG' },
+                  { value: 'zip', label: 'ZIP' },
                 ]}
               />
             </div>
@@ -326,7 +328,7 @@ export function Editor({ onSaved }: { onSaved: () => void }) {
               />
             </div>
 
-            {format === 'pdf' && (
+            {(format === 'pdf' || format === 'zip') && (
               <label className="switch">
                 <input
                   type="checkbox"

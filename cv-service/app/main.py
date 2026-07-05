@@ -151,4 +151,9 @@ def export(req: ExportRequest):
     if fmt == "pdf":
         pdf = export_mod.compose_export(entry, req.page_size, req.include_legend)
         return Response(content=pdf, media_type="application/pdf")
+    if fmt == "svg":
+        return Response(content=export_mod.export_svg(entry), media_type="image/svg+xml")
+    if fmt == "zip":
+        bundle = export_mod.compose_bundle(entry, req.page_size, req.include_legend)
+        return Response(content=bundle, media_type="application/zip")
     raise HTTPException(status_code=400, detail=f"unsupported format: {req.format}")

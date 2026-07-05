@@ -186,7 +186,7 @@ async function fetchBlob(url: string): Promise<Blob> {
   return res.blob()
 }
 
-export type ExportFormat = 'pdf' | 'png'
+export type ExportFormat = 'pdf' | 'png' | 'svg' | 'zip'
 
 export async function exportBlob(
   imageId: string,

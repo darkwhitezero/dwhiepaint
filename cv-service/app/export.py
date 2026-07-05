@@ -10,11 +10,13 @@ from __future__ import annotations
 
 import io
 import math
+import zipfile
 
 import cairosvg
+import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 
-from . import config, vectorize
+from . import config, render, vectorize
 from .cache import ImageEntry, PaletteEntry
 
 Rect = tuple[int, int, int, int]  # x, y, w, h
@@ -60,7 +62,7 @@ def compose_export(entry: ImageEntry, page_size: str = "A4",
     landscape = src_w > src_h
     page_w, page_h = _page_dimensions(page_size, landscape)
 
-    pages = [_coloring_page(seg, page_w, page_h)]
+    pages = [_coloring_page(entry, seg, page_w, page_h)]
     if include_legend:
         pages.append(_legend_page(seg.palette, page_w, page_h))
 
@@ -69,6 +71,39 @@ def compose_export(entry: ImageEntry, page_size: str = "A4",
         buf, format="PDF", resolution=float(DPI),
         save_all=True, append_images=pages[1:],
     )
+    return buf.getvalue()
+
+
+def export_svg(entry: ImageEntry) -> bytes:
+    """Return the canonical scalable coloring sheet as SVG bytes (DPI-free)."""
+    seg = entry.segmentation
+    if seg is None:
+        raise ValueError("image has not been segmented yet")
+    src_h, src_w = seg.label_img.shape
+    svg = vectorize.to_svg(
+        seg.label_img, seg.palette,
+        min_label_radius=6.0,
+        stroke_px=max(1.0, min(src_h, src_w) * 0.0016),
+    )
+    return svg.encode("utf-8")
+
+
+def compose_bundle(entry: ImageEntry, page_size: str = "A4",
+                   include_legend: bool = True) -> bytes:
+    """Return a ZIP with the printable PDF, the vector SVG, and the painted preview."""
+    seg = entry.segmentation
+    if seg is None:
+        raise ValueError("image has not been segmented yet")
+
+    painted = render.painted_preview(seg.label_img, seg.palette)
+    pbuf = io.BytesIO()
+    Image.fromarray(painted.astype("uint8")).save(pbuf, format="PNG")
+
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
+        z.writestr("raskraska.pdf", compose_export(entry, page_size, include_legend))
+        z.writestr("kontur.svg", export_svg(entry))
+        z.writestr("predprosmotr.png", pbuf.getvalue())
     return buf.getvalue()
 
 
@@ -86,13 +121,13 @@ def compose_png(entry: ImageEntry, page_size: str = "A4") -> bytes:
     landscape = src_w > src_h
     page_w, page_h = _page_dimensions(page_size, landscape)
 
-    page = _coloring_page(seg, page_w, page_h)
+    page = _coloring_page(entry, seg, page_w, page_h)
     buf = io.BytesIO()
     page.save(buf, format="PNG", dpi=(DPI, DPI))
     return buf.getvalue()
 
 
-def _coloring_page(seg, page_w: int, page_h: int) -> Image.Image:
+def _coloring_page(entry: ImageEntry, seg, page_w: int, page_h: int) -> Image.Image:
     min_dim = min(page_w, page_h)
     margin = round(min_dim * 0.04)
 
@@ -104,10 +139,40 @@ def _coloring_page(seg, page_w: int, page_h: int) -> Image.Image:
     draw.text((margin, round(margin * 0.5)), "dwhiepaint — раскраска по номерам",
               fill=(120, 120, 120), font=title_font)
 
-    top = margin + title_size + round(margin * 0.4)
+    # Reference thumbnails (original photo + painted preview) in the top-right so
+    # the painter can see the target while colouring.
+    ref_bottom = _paste_reference(page, draw, entry, seg, page_w, margin,
+                                  round(min_dim * 0.13))
+
+    top = max(margin + title_size + round(margin * 0.4), ref_bottom + round(margin * 0.4))
     art_rect: Rect = (margin, top, page_w - 2 * margin, page_h - top - margin)
     _paste_artwork(page, draw, seg, art_rect)
     return page
+
+
+def _paste_reference(page: Image.Image, draw: ImageDraw.ImageDraw,
+                     entry: ImageEntry, seg, page_w: int, margin: int,
+                     ref_h: int) -> int:
+    """Paste original + painted-preview thumbnails top-right; return their bottom y."""
+    cap_font = _load_font(config.FONT_PATH, max(8, round(ref_h * 0.14)))
+    painted = render.painted_preview(seg.label_img, seg.palette)
+    thumbs = [("Оригинал", entry.rgb), ("Ваш результат", painted)]
+
+    gap = round(ref_h * 0.14)
+    x_right = page_w - margin
+    y = round(margin * 0.5)
+    bottom = y
+    for label, arr in reversed(thumbs):  # rightmost first → left-to-right order kept
+        im = Image.fromarray(np.asarray(arr).astype("uint8")).convert("RGB")
+        im.thumbnail((round(ref_h * 1.25), ref_h), Image.LANCZOS)
+        x = x_right - im.width
+        page.paste(im, (x, y))
+        draw.rectangle([x - 1, y - 1, x + im.width, y + im.height], outline=(200, 200, 200))
+        draw.text((x, y + im.height + round(ref_h * 0.04)), label,
+                  fill=(120, 120, 120), font=cap_font)
+        bottom = max(bottom, y + im.height + round(ref_h * 0.2))
+        x_right = x - gap
+    return bottom
 
 
 def _legend_page(palette: list[PaletteEntry], page_w: int, page_h: int) -> Image.Image:
