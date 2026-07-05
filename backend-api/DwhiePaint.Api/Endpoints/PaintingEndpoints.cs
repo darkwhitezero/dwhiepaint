@@ -51,6 +51,9 @@ public static class PaintingEndpoints
         FileStorage storage, CancellationToken ct)
     {
         if (file.Length == 0) return Results.BadRequest(new { error = "empty file" });
+        const long maxBytes = 20L * 1024 * 1024;
+        if (file.Length > maxBytes)
+            return Results.BadRequest(new { error = "file too large (max 20 MB)" });
 
         var userId = principal.GetUserId();
         // The JWT can outlive the user row (e.g. account removed, dev DB reset);

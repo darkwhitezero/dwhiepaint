@@ -21,7 +21,11 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
+import time
 from typing import Any
+
+logger = logging.getLogger("dwhiepaint.jobs")
 
 from arq.connections import RedisSettings
 
@@ -74,14 +78,19 @@ async def run_segment(
         rp.hset(key, mapping={name: str(val) for name, val in fields.items()})
         rp.expire(key, ttl)
 
+    t0 = time.monotonic()
+    stage_ts: dict[str, float] = {}
     mark(status="processing", stage="superpixels", progress=0.0, image_id=image_id)
+    logger.info("job %s start image=%s k=%s detail=%s", job_id, image_id, k, detail)
 
     entry = load_entry(image_id)
     if entry is None:
+        logger.warning("job %s FAILED image=%s: not found/expired", job_id, image_id)
         mark(status="failed", error="image_id not found or expired")
         return {"status": "failed"}
 
     def on_progress(stage: str, frac: float) -> None:
+        stage_ts[stage] = round(time.monotonic() - t0, 2)
         mark(stage=stage, progress=round(frac, 3))
 
     try:
@@ -89,8 +98,13 @@ async def run_segment(
             segment_mod.segment, entry, k, detail, on_progress
         )
     except Exception as exc:  # noqa: BLE001 — record failure for the poller
+        logger.warning("job %s FAILED image=%s after %.1fs: %s",
+                       job_id, image_id, time.monotonic() - t0, exc)
         mark(status="failed", stage="failed", error=str(exc))
         return {"status": "failed", "error": str(exc)}
+
+    logger.info("job %s done image=%s colors=%d total=%.1fs stages=%s",
+                job_id, image_id, len(seg.palette), time.monotonic() - t0, stage_ts)
 
     result = {
         "palette": _serialize_palette(seg),

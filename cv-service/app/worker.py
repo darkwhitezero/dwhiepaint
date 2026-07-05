@@ -11,6 +11,8 @@ images from ``preview.png`` and writes rendered artifacts where the API's
 
 from __future__ import annotations
 
+import logging
+
 import numpy as np
 import redis as redis_sync
 
@@ -18,6 +20,7 @@ from . import config, jobs, matte
 
 
 async def on_startup(ctx: dict) -> None:
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
     # Synchronous client used to write progress from the segmentation thread.
     ctx["progress_redis"] = redis_sync.Redis.from_url(
         config.REDIS_URL, decode_responses=True

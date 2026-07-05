@@ -15,7 +15,8 @@ public static class AuthEndpoints
 
     public static IEndpointRouteBuilder MapAuthEndpoints(this IEndpointRouteBuilder app)
     {
-        var group = app.MapGroup("/api/auth");
+        // Stricter rate limit on auth to blunt credential stuffing / brute force.
+        var group = app.MapGroup("/api/auth").RequireRateLimiting("auth");
 
         group.MapPost("/register", async (
             AuthRequest req, AppDbContext db, TokenService tokens) =>
