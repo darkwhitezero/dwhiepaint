@@ -1,0 +1,214 @@
+/* ============================================================
+   dwhiepaint — Refined Apple Glass · design tokens
+   Portable starter kit. Drop this file into a new project and
+   @import it (or paste into your global stylesheet) BEFORE your
+   component styles. All surfaces below reference these vars.
+
+   Fonts (add to <head>):
+   <link rel="preconnect" href="https://fonts.googleapis.com">
+   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Cormorant:ital,wght@0,500;0,600;0,700;1,500;1,600&display=swap">
+
+   Theme switching: default is light. Force a theme with
+   <html data-theme="light"> or <html data-theme="dark">.
+   With no attribute, the OS preference (prefers-color-scheme) wins.
+   ============================================================ */
+
+:root {
+  color-scheme: light dark;
+
+  /* --- type --- */
+  --font: 'Manrope', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
+    'Helvetica Neue', Arial, sans-serif;
+  --font-display: 'Cormorant', 'Times New Roman', Georgia, serif; /* display headings + wordmark */
+
+  /* --- light theme (apple.com marketing, softened & cool) --- */
+  --bg: #f4f6fb;
+  --bg-2: #eef1f8;
+  --surface: #ffffff;
+  --surface-2: #f2f4f9;
+  --text: #14161c;
+  --text-secondary: #5b6170;
+  --text-tertiary: #878d9c;
+  --border: #d7dbe6;
+  --border-soft: #e6e9f2;
+  --accent: #0a74f0;
+  --accent-hover: #1e82ff;
+  --accent-press: #0064d6;
+  --on-accent: #ffffff;
+  --danger: #d70015;
+  --ok: #1d8a3f;
+  --nav-bg: rgba(255, 255, 255, 0.6);
+  --shadow-sm: 0 1px 2px rgba(19, 24, 40, 0.05);
+  --shadow: 0 8px 30px -12px rgba(19, 24, 40, 0.18);
+  --shadow-lg: 0 24px 60px -20px rgba(19, 24, 40, 0.28);
+  --skeleton: linear-gradient(100deg, #e7eaf3 30%, #f4f6fb 50%, #e7eaf3 70%);
+
+  /* Aurora ambient background — gentle in light so it reads as a tint. */
+  --aurora-1: rgba(120, 160, 255, 0.16);
+  --aurora-2: rgba(150, 214, 224, 0.13);
+  --aurora-3: rgba(198, 166, 255, 0.15);
+  --grain-opacity: 0.035;
+
+  /* --- glass (theme-adaptive via color-mix on the theme's own tokens) --- */
+  --glass-bg: color-mix(in srgb, var(--surface) 66%, transparent);
+  --glass-2: color-mix(in srgb, var(--surface-2) 62%, transparent);
+  --glass-border: color-mix(in srgb, var(--text) 12%, transparent);
+  --glass-hi: color-mix(in srgb, #ffffff 60%, transparent);
+  --glass-blur: 22px;
+
+  /* --- scale --- */
+  --radius-sm: 8px;
+  --radius: 12px;
+  --radius-lg: 18px;
+  --radius-xl: 26px;
+  --radius-pill: 980px;
+  --ease: cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+
+  font-family: var(--font);
+  color: var(--text);
+  background: var(--bg);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  font-synthesis: none;
+}
+
+/* Dark tokens: OS-dark AND not force-light, OR explicit force-dark.
+   A manual choice always beats the system preference. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --bg: #080a0f;
+    --bg-2: #0d1017;
+    --surface: #161a22;
+    --surface-2: #1e232d;
+    --text: #f2f4f8;
+    --text-secondary: #a2a9b8;
+    --text-tertiary: #767d8c;
+    --border: #2b313d;
+    --border-soft: #222834;
+    --accent: #3d9bff;
+    --accent-hover: #5aabff;
+    --accent-press: #2b86ff;
+    --on-accent: #ffffff;
+    --danger: #ff453a;
+    --ok: #30d158;
+    --nav-bg: rgba(10, 13, 20, 0.55);
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.5);
+    --shadow: 0 10px 34px -12px rgba(0, 0, 0, 0.7);
+    --shadow-lg: 0 28px 64px -20px rgba(0, 0, 0, 0.8);
+    --skeleton: linear-gradient(100deg, #1c212b 30%, #262c38 50%, #1c212b 70%);
+    --aurora-1: rgba(52, 112, 255, 0.62);
+    --aurora-2: rgba(34, 196, 214, 0.42);
+    --aurora-3: rgba(146, 100, 246, 0.6);
+    --grain-opacity: 0.06;
+    --glass-hi: color-mix(in srgb, #ffffff 22%, transparent);
+  }
+}
+
+:root[data-theme='dark'] {
+  --bg: #080a0f;
+  --bg-2: #0d1017;
+  --surface: #161a22;
+  --surface-2: #1e232d;
+  --text: #f2f4f8;
+  --text-secondary: #a2a9b8;
+  --text-tertiary: #767d8c;
+  --border: #2b313d;
+  --border-soft: #222834;
+  --accent: #3d9bff;
+  --accent-hover: #5aabff;
+  --accent-press: #2b86ff;
+  --on-accent: #ffffff;
+  --danger: #ff453a;
+  --ok: #30d158;
+  --nav-bg: rgba(10, 13, 20, 0.55);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.5);
+  --shadow: 0 10px 34px -12px rgba(0, 0, 0, 0.7);
+  --shadow-lg: 0 28px 64px -20px rgba(0, 0, 0, 0.8);
+  --skeleton: linear-gradient(100deg, #1c212b 30%, #262c38 50%, #1c212b 70%);
+  --aurora-1: rgba(60, 120, 255, 0.3);
+  --aurora-2: rgba(40, 190, 200, 0.22);
+  --aurora-3: rgba(150, 90, 240, 0.26);
+  --grain-opacity: 0.05;
+  --glass-hi: color-mix(in srgb, #ffffff 22%, transparent);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+/* Ambient aurora + film grain baked into the body background (one fixed
+   layer stack — robust, no z-index games): grain tile on top, soft aurora
+   blobs, base gradient at the bottom. Glass surfaces refract it via their
+   backdrop-filter. Purely decorative. */
+body {
+  margin: 0;
+  min-height: 100dvh;
+  color: var(--text);
+  font-family: var(--font);
+  font-size: 16px;
+  line-height: 1.5;
+  background-color: var(--bg);
+  background-image:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.05'/%3E%3C/svg%3E"),
+    radial-gradient(48% 52% at 12% 4%, var(--aurora-1), transparent 66%),
+    radial-gradient(46% 50% at 90% 2%, var(--aurora-3), transparent 66%),
+    radial-gradient(54% 56% at 52% 40%, var(--aurora-2), transparent 68%),
+    radial-gradient(50% 54% at 88% 76%, var(--aurora-3), transparent 68%),
+    radial-gradient(50% 54% at 8% 90%, var(--aurora-1), transparent 68%),
+    linear-gradient(180deg, var(--bg) 0%, var(--bg-2) 100%);
+  background-repeat: repeat, no-repeat, no-repeat, no-repeat, no-repeat, no-repeat,
+    no-repeat;
+  background-size: 160px 160px, auto, auto, auto, auto, auto, auto;
+  background-attachment: fixed;
+}
+
+/* Editorial serif display for top-level headings + wordmark. */
+h1,
+h2,
+h3 {
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+}
+h1 {
+  font-family: var(--font-display);
+  font-weight: 600;
+  letter-spacing: 0;
+}
+
+::selection {
+  background: color-mix(in srgb, var(--accent) 24%, transparent);
+}
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* Global motion kill-switch. Exempt genuine progress indicators
+   (spinners, loading bars) locally with a more specific !important rule. */
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}
+
+/* ---------- the glass primitive ----------
+   Apply .glass to any card / panel / popover surface. */
+.glass {
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow), inset 0 1px 0 var(--glass-hi);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(160%);
+  backdrop-filter: blur(var(--glass-blur)) saturate(160%);
+}
