@@ -24,6 +24,18 @@ const POLL_INTERVAL_MS = 700
 const msg = (e: unknown) => String(e instanceof Error ? e.message : e)
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
+// URL.createObjectURL only ever mints a `blob:` URL for a local File, and an
+// <img src> can't execute markup regardless — but pin the scheme to `blob:`
+// explicitly so nothing but a browser-minted object URL can reach the preview.
+// This also severs CodeQL's xss-through-dom taint path from the file input
+// (js/xss-through-dom): the value assigned to `src` now passes a scheme allowlist.
+function objectUrlFor(f: File): string | null {
+  const url = URL.createObjectURL(f)
+  if (url.startsWith('blob:')) return url
+  URL.revokeObjectURL(url) // unreachable in practice; never leak a rejected URL
+  return null
+}
+
 // The CV service overwrites the same cache filenames (regions.svg,
 // preview_painted.png…) on every re-segmentation, so the URLs are byte-identical
 // between runs — the browser would serve the stale first render and the SVG
@@ -77,7 +89,7 @@ export function Editor({ onSaved }: { onSaved: () => void }) {
 
   function setPreviewFor(f: File | null) {
     if (localPreviewRef.current) URL.revokeObjectURL(localPreviewRef.current)
-    const url = f ? URL.createObjectURL(f) : null
+    const url = f ? objectUrlFor(f) : null
     localPreviewRef.current = url
     setLocalPreview(url)
   }
