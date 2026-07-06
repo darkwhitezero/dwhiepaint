@@ -1,4 +1,8 @@
+<div align="center">
+
 # dwhiepaint
+
+**Русский** · [English](README.en.md)
 
 ### Раскраска по номерам из фото
 
