@@ -46,6 +46,21 @@
 | **Аккаунты и шеринг** | JWT-авторизация, история работ, публичные ссылки на готовые раскраски |
 | **Стеклянный интерфейс** | Apple-подобный glassmorphism, светлая и тёмная темы, адаптив |
 
+## Примеры
+
+Несколько фотографий и то, что из них получается: нумерованный контур для печати
+и предпросмотр закрашенного результата. Число цветов и уровень детализации
+подобраны под каждую картинку.
+
+| Оригинал | Раскраска по номерам | Закрашенный предпросмотр |
+|:---:|:---:|:---:|
+| <img src="docs/gallery/aquarium-original.jpg" width="250"><br><sub>20 цветов · Детально</sub> | <img src="docs/gallery/aquarium-outline.png" width="250"> | <img src="docs/gallery/aquarium-preview.png" width="250"> |
+| <img src="docs/gallery/stars-girl-original.jpg" width="250"><br><sub>24 цвета · Детально</sub> | <img src="docs/gallery/stars-girl-outline.png" width="250"> | <img src="docs/gallery/stars-girl-preview.png" width="250"> |
+| <img src="docs/gallery/demon-original.jpg" width="250"><br><sub>20 цветов · Детально</sub> | <img src="docs/gallery/demon-outline.png" width="250"> | <img src="docs/gallery/demon-preview.png" width="250"> |
+| <img src="docs/gallery/meme-original.jpg" width="250"><br><sub>16 цветов · Детально</sub> | <img src="docs/gallery/meme-outline.png" width="250"> | <img src="docs/gallery/meme-preview.png" width="250"> |
+| <img src="docs/gallery/fish-tunnel-original.jpg" width="250"><br><sub>20 цветов · Детально</sub> | <img src="docs/gallery/fish-tunnel-outline.png" width="250"> | <img src="docs/gallery/fish-tunnel-preview.png" width="250"> |
+| <img src="docs/gallery/pixie-original.jpg" width="250"><br><sub>16 цветов · Детально</sub> | <img src="docs/gallery/pixie-outline.png" width="250"> | <img src="docs/gallery/pixie-preview.png" width="250"> |
+
 ## Архитектура
 
 ```
