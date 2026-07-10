@@ -10,7 +10,7 @@ import numpy as np
 from skimage.color import deltaE_ciede2000, lab2rgb, rgb2lab
 
 from . import config, importance, render, storage, superpixels, vectorize
-from .cache import ImageEntry, PaletteEntry, Segmentation
+from .cache import ImageEntry, PaletteEntry, Segmentation, save_segmentation
 from .color_naming import name_for_lab
 
 # A progress reporter: (stage_name, fraction_complete_in_[0,1]) -> None. Used by
@@ -101,6 +101,11 @@ def segment(
     report("vectorize", 0.9)
     svg = vectorize.to_svg(idx_img, palette, importance_map=imp_map)
     seg.svg_url = storage.save_text(entry.image_id, "regions.svg", svg)
+
+    # Persist to disk so a DIFFERENT process (the API container handling a
+    # later /export, when segmentation ran in the worker container) can
+    # reconstruct this segmentation instead of 409-ing — see cache.ensure_segmentation.
+    save_segmentation(entry.image_id, seg)
 
     report("done", 1.0)
     return seg, seg.region_map_url

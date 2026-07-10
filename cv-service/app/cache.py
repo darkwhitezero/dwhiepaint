@@ -116,3 +116,73 @@ def load_entry(image_id: str) -> ImageEntry | None:
     entry = ImageEntry(image_id=image_id, rgb=rgb, lab=lab)
     cache.put(entry)
     return entry
+
+
+def save_segmentation(image_id: str, seg: Segmentation) -> None:
+    """Persist enough of a Segmentation to reconstruct it in a DIFFERENT
+    process. The async worker computes segmentation in a separate
+    process/container from the cv-service API (they share only CACHE_DIR and
+    Redis, never in-memory state — see project docs on the shared cv/worker
+    image), so without this, /export — handled by the API container, which
+    never ran segment() itself — always finds ``entry.segmentation is None``
+    and 409s even though segmentation genuinely completed. Called once, right
+    after segment() finishes; overwritten on every re-segmentation, same as
+    the rendered PNG/SVG artifacts.
+
+    label_img is cast to uint8 before saving: MAX_K caps the palette at 32
+    colors, so every index fits, and it quarters the file size vs. its
+    in-memory int32 dtype.
+    """
+    from . import storage  # local import: storage has no reverse dep on cache
+
+    storage.save_array(image_id, "label.npy", seg.label_img.astype(np.uint8))
+    if seg.importance_map is not None:
+        storage.save_array(image_id, "importance.npy", seg.importance_map)
+    storage.save_json(image_id, "segmentation.json", {
+        "k": seg.k,
+        "palette": [
+            {"index": p.index, "hex": p.hex, "lab": list(p.lab),
+             "name_ru": p.name_ru, "name_en": p.name_en}
+            for p in seg.palette
+        ],
+        "region_map_url": seg.region_map_url,
+        "painted_preview_url": seg.painted_preview_url,
+        "svg_url": seg.svg_url,
+    })
+
+
+def ensure_segmentation(entry: ImageEntry) -> Segmentation | None:
+    """Reconstruct entry.segmentation from disk if this process's copy of the
+    entry never had segment() run on it directly (see save_segmentation).
+    Returns None (image was never segmented, or the cache dir was pruned)
+    without raising — callers decide how to react (e.g. a 409).
+    """
+    if entry.segmentation is not None:
+        return entry.segmentation
+
+    from . import storage  # local import: storage has no reverse dep on cache
+
+    meta = storage.load_json(entry.image_id, "segmentation.json")
+    label_img = storage.load_array(entry.image_id, "label.npy")
+    if meta is None or label_img is None:
+        return None
+
+    importance_map = storage.load_array(entry.image_id, "importance.npy")
+    palette = [
+        PaletteEntry(
+            index=p["index"], hex=p["hex"], lab=tuple(p["lab"]),
+            name_ru=p["name_ru"], name_en=p.get("name_en"),
+        )
+        for p in meta["palette"]
+    ]
+    seg = Segmentation(
+        k=meta["k"],
+        label_img=label_img.astype(np.int32),
+        palette=palette,
+        region_map_url=meta.get("region_map_url"),
+        painted_preview_url=meta.get("painted_preview_url"),
+        svg_url=meta.get("svg_url"),
+        importance_map=importance_map,
+    )
+    entry.segmentation = seg
+    return seg

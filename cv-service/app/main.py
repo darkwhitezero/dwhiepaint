@@ -12,7 +12,7 @@ from . import config
 from . import export as export_mod
 from . import jobs as jobs_mod
 from . import segment as segment_mod
-from .cache import cache
+from .cache import ensure_segmentation, load_entry
 
 
 @asynccontextmanager
@@ -73,7 +73,7 @@ async def analyze(file: UploadFile = File(...)):
 
 @app.post("/segment")
 def segment(req: SegmentRequest):
-    entry = cache.get(req.image_id)
+    entry = load_entry(req.image_id)
     if entry is None:
         raise HTTPException(status_code=404, detail="image_id not found or expired")
 
@@ -139,10 +139,15 @@ async def job_result(job_id: str, request: Request):
 
 @app.post("/export")
 def export(req: ExportRequest):
-    entry = cache.get(req.image_id)
+    entry = load_entry(req.image_id)
     if entry is None:
         raise HTTPException(status_code=404, detail="image_id not found or expired")
-    if entry.segmentation is None:
+    # The async job path segments in the WORKER container, a separate process
+    # from this API container — they share only CACHE_DIR and Redis, never
+    # in-memory state, so entry.segmentation is normally None here even right
+    # after a successful segment. ensure_segmentation reconstructs it from the
+    # files segment() persisted (see cache.save_segmentation).
+    if ensure_segmentation(entry) is None:
         raise HTTPException(status_code=409, detail="segment the image before export")
 
     fmt = req.format.lower()
