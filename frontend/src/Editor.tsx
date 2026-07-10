@@ -203,13 +203,18 @@ export function Editor({ onSaved }: { onSaved: () => void }) {
     setBusy('exporting')
     setError(null)
     try {
+      const isPainted = format === 'painted'
       const withLegend = (format === 'pdf' || format === 'zip') && includeLegend
       const t = format === 'pdf' ? tiles : 1
       const blob = await exportBlob(imageId, pageSize, withLegend, format, t)
       const suffix = t > 1 ? `-${t}x${t}` : ''
-      triggerDownload(blob, `dwhiepaint-${pageSize}${suffix}.${format}`)
+      // "painted" has no page/DPI concept — a plain PNG named after the
+      // result, not the print page size.
+      const ext = isPainted ? 'png' : format
+      const namePart = isPainted ? 'result' : pageSize
+      triggerDownload(blob, `dwhiepaint-${namePart}${suffix}.${ext}`)
       onSaved()
-      toast.success(`${format.toUpperCase()} готов к печати`)
+      toast.success(isPainted ? 'Изображение готово к отправке' : `${format.toUpperCase()} готов к печати`)
     } catch (e) {
       const m = msg(e)
       setError(m)
@@ -337,22 +342,25 @@ export function Editor({ onSaved }: { onSaved: () => void }) {
                   { value: 'png', label: 'PNG' },
                   { value: 'svg', label: 'SVG' },
                   { value: 'zip', label: 'ZIP' },
+                  { value: 'painted', label: 'Закрашено' },
                 ]}
               />
             </div>
 
-            <div className="control">
-              <span className="control-label">Размер</span>
-              <SegmentedControl
-                ariaLabel="Размер листа"
-                value={pageSize}
-                onChange={setPageSize}
-                options={[
-                  { value: 'A4', label: 'A4' },
-                  { value: 'A3', label: 'A3' },
-                ]}
-              />
-            </div>
+            {format !== 'painted' && (
+              <div className="control">
+                <span className="control-label">Размер</span>
+                <SegmentedControl
+                  ariaLabel="Размер листа"
+                  value={pageSize}
+                  onChange={setPageSize}
+                  options={[
+                    { value: 'A4', label: 'A4' },
+                    { value: 'A3', label: 'A3' },
+                  ]}
+                />
+              </div>
+            )}
 
             {format === 'pdf' && (
               <div className="control">
@@ -390,7 +398,9 @@ export function Editor({ onSaved }: { onSaved: () => void }) {
               disabled={!seg || busy !== 'idle'}
             >
               {busy === 'exporting' && <span className="spinner" aria-hidden="true" />}
-              {busy === 'exporting' ? 'Готовим…' : `Скачать ${format.toUpperCase()}`}
+              {busy === 'exporting'
+                ? 'Готовим…'
+                : `Скачать ${format === 'painted' ? 'изображение' : format.toUpperCase()}`}
             </button>
           </div>
 

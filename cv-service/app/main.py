@@ -154,6 +154,9 @@ def export(req: ExportRequest):
     if fmt == "png":
         png = export_mod.compose_png(entry, req.page_size)
         return Response(content=png, media_type="image/png")
+    if fmt == "painted":
+        png = export_mod.compose_painted_png(entry)
+        return Response(content=png, media_type="image/png")
     if fmt == "pdf":
         if req.tiles > 1:
             pdf = export_mod.compose_tiled(entry, req.page_size, req.tiles, req.include_legend)

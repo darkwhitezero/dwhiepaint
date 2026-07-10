@@ -89,6 +89,25 @@ def export_svg(entry: ImageEntry) -> bytes:
     return svg.encode("utf-8")
 
 
+def _painted_png_bytes(seg) -> bytes:
+    painted = render.painted_preview(seg.label_img, seg.palette)
+    buf = io.BytesIO()
+    Image.fromarray(painted.astype("uint8")).save(buf, format="PNG")
+    return buf.getvalue()
+
+
+def compose_painted_png(entry: ImageEntry) -> bytes:
+    """Return just the painted artwork as PNG bytes — no title, no reference
+    thumbnails, no page composition, nothing but the colored result. Meant
+    for sharing (e.g. with a friend), not printing, so it stays at the
+    working resolution rather than being upscaled to print DPI.
+    """
+    seg = entry.segmentation
+    if seg is None:
+        raise ValueError("image has not been segmented yet")
+    return _painted_png_bytes(seg)
+
+
 def compose_bundle(entry: ImageEntry, page_size: str = "A4",
                    include_legend: bool = True) -> bytes:
     """Return a ZIP with the printable PDF, the vector SVG, and the painted preview."""
@@ -96,15 +115,11 @@ def compose_bundle(entry: ImageEntry, page_size: str = "A4",
     if seg is None:
         raise ValueError("image has not been segmented yet")
 
-    painted = render.painted_preview(seg.label_img, seg.palette)
-    pbuf = io.BytesIO()
-    Image.fromarray(painted.astype("uint8")).save(pbuf, format="PNG")
-
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
         z.writestr("raskraska.pdf", compose_export(entry, page_size, include_legend))
         z.writestr("kontur.svg", export_svg(entry))
-        z.writestr("predprosmotr.png", pbuf.getvalue())
+        z.writestr("predprosmotr.png", _painted_png_bytes(seg))
     return buf.getvalue()
 
 

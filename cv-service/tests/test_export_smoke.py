@@ -1,8 +1,9 @@
 import io
 
+import numpy as np
 from PIL import Image
 
-from app import analyze, config
+from app import analyze, config, render
 from app import export as export_mod
 from app import segment as segment_mod
 
@@ -32,3 +33,29 @@ def test_full_pipeline_pdf_and_png(solid_blocks_rgb, tmp_path, monkeypatch):
     png_bytes = export_mod.compose_png(entry, "A4")
     img = Image.open(io.BytesIO(png_bytes))
     assert img.size == config.PAGE_SIZES_PX["A4"]
+
+
+def test_painted_png_is_unbranded_and_working_resolution(solid_blocks_rgb, tmp_path, monkeypatch):
+    """The 'painted' export (for sharing the result, not printing) must be
+    just the colored artwork — no dwhiepaint title, no reference thumbnails,
+    no page composition — at the working resolution, not the print page size.
+    """
+    monkeypatch.setattr(config, "CACHE_DIR", tmp_path)
+
+    result = analyze.analyze(_png_bytes(solid_blocks_rgb))
+    entry = analyze.cache.get(result["image_id"])
+    assert entry is not None
+    segment_mod.segment(entry, k=result["predicted_k"])
+
+    seg = entry.segmentation
+    png_bytes = export_mod.compose_painted_png(entry)
+    img = Image.open(io.BytesIO(png_bytes)).convert("RGB")
+
+    # Working resolution (label_img shape), NOT a print page size.
+    assert img.size == (seg.label_img.shape[1], seg.label_img.shape[0])
+    assert img.size != config.PAGE_SIZES_PX["A4"]
+
+    # Pixel-identical to the raw painted preview — proves no title/thumbnail/
+    # page composition was baked in on top.
+    expected = render.painted_preview(seg.label_img, seg.palette)
+    assert np.array_equal(np.asarray(img), expected)
