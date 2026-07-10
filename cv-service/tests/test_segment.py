@@ -1,4 +1,5 @@
 import numpy as np
+from skimage.color import deltaE_ciede2000
 
 from app import segment
 
@@ -62,3 +63,79 @@ def test_merge_respects_min_area_floor():
 
     # The small region (id 0, area 4) must have merged away entirely.
     assert not np.any(cleaned == 0)
+
+
+def test_merge_prefers_weak_gradient_border_over_sharp_one():
+    """When two neighbors tie on BOTH border length and color distance, the
+    edge-aware term must still break the tie: the small region should merge
+    into the neighbor whose shared border sits on a weak image gradient, not
+    a sharp real edge.
+    """
+    region_id = np.array([[1, 0, 2]] * 5, dtype=np.int64)
+    region_cluster = np.array([0, 1, 2], dtype=np.int32)
+    areas = np.array([5.0, 1000.0, 1000.0])
+    min_area = 10
+
+    # Symmetric a*/b* offsets from region 0 -> CIEDE2000 to region 1 and region
+    # 2 is numerically identical (verified: both 12.8...), so color is a tie.
+    cluster_lab = np.array(
+        [[50.0, 0.0, 0.0], [50.0, 10.0, 10.0], [50.0, -10.0, -10.0]], dtype=np.float64,
+    )
+
+    # Border(region1, region0) [columns 0-1] sits on a weak gradient; border
+    # (region0, region2) [columns 1-2] sits on a strong one.
+    gradient_mag = np.array([[0.05, 0.05, 1.75]] * 5, dtype=np.float32)
+
+    cleaned = segment.merge_small_regions(
+        region_id, region_cluster, areas, min_area,
+        cluster_lab=cluster_lab, gradient_mag=gradient_mag,
+    )
+
+    # The tiny region's pixels (middle column) must take the weak-border
+    # neighbor's cluster id (1), not the sharp-border one (2).
+    assert np.all(cleaned[:, 1] == 1)
+
+
+def test_merge_gradient_term_is_noop_without_gradient_mag():
+    """Regression guard: the existing color-tiebreak test must still pass
+    unchanged when gradient_mag isn't passed (the CIEDE2000 swap alone must
+    not flip its outcome).
+    """
+    region_id = np.array([[1, 0, 2]] * 5, dtype=np.int64)
+    region_cluster = np.array([0, 1, 2], dtype=np.int32)
+    areas = np.array([5.0, 1000.0, 1000.0])
+    min_area = 10
+    cluster_lab = np.array(
+        [[50.0, 0.0, 0.0], [52.0, 1.0, 1.0], [90.0, 40.0, 40.0]], dtype=np.float64,
+    )
+
+    cleaned = segment.merge_small_regions(
+        region_id, region_cluster, areas, min_area, cluster_lab=cluster_lab,
+    )
+    assert np.all(cleaned[:, 1] == 1)
+
+
+def test_palette_separates_near_duplicate_colors():
+    """Two regions whose true mean color is nearly identical must still read
+    as visually distinct palette entries: after `_build_palette`, adjacent
+    (dark->light sorted) entries must clear the configured CIEDE2000
+    separation floor, without changing how many colors are in the palette.
+    """
+    from app import config
+
+    h, w = 10, 30
+    cleaned = np.zeros((h, w), dtype=np.int32)
+    cleaned[:, 10:20] = 1
+    cleaned[:, 20:] = 2
+    rgb = np.zeros((h, w, 3), dtype=np.uint8)
+    rgb[:, :10] = (40, 40, 40)          # dark
+    rgb[:, 10:20] = (128, 128, 130)     # mid-gray
+    rgb[:, 20:] = (131, 129, 127)       # near-duplicate mid-gray (barely different)
+
+    idx_img, palette = segment._build_palette(cleaned, rgb)
+
+    assert len(palette) == 3  # separation must not drop/merge palette entries
+    labs = [np.array(p.lab) for p in palette]
+    for a, b in zip(labs, labs[1:]):
+        d = float(deltaE_ciede2000(a.reshape(1, 3), b.reshape(1, 3))[0])
+        assert d >= config.PALETTE_MIN_SEPARATION_DELTA_E - 1e-6

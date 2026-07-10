@@ -84,6 +84,7 @@ def export_svg(entry: ImageEntry) -> bytes:
         seg.label_img, seg.palette,
         min_label_radius=6.0,
         stroke_px=max(1.0, min(src_h, src_w) * 0.0016),
+        importance_map=seg.importance_map,
     )
     return svg.encode("utf-8")
 
@@ -155,7 +156,8 @@ def compose_tiled(entry: ImageEntry, page_size: str = "A4", grid: int = 2,
     scale = min(total_w / src_w, total_h / src_h)
     aw, ah = max(1, round(src_w * scale)), max(1, round(src_h * scale))
     svg = vectorize.to_svg(seg.label_img, seg.palette, min_label_radius=6.0,
-                           stroke_px=max(1.0, min(src_h, src_w) * 0.0016))
+                           stroke_px=max(1.0, min(src_h, src_w) * 0.0016),
+                           importance_map=seg.importance_map)
     art = Image.open(io.BytesIO(
         cairosvg.svg2png(bytestring=svg.encode("utf-8"), output_width=aw, output_height=ah)
     )).convert("RGB")
@@ -310,6 +312,7 @@ def _paste_artwork(page: Image.Image, draw: ImageDraw.ImageDraw,
         seg.label_img, seg.palette,
         min_label_radius=6.0,
         stroke_px=max(1.0, min(src_h, src_w) * 0.0016),
+        importance_map=seg.importance_map,
     )
     png = cairosvg.svg2png(bytestring=svg.encode("utf-8"), output_width=tw, output_height=th)
     art = Image.open(io.BytesIO(png)).convert("RGB")

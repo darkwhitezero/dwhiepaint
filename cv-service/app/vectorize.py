@@ -26,9 +26,11 @@ def _subpath(points: np.ndarray) -> str:
     return d + "Z"
 
 
-def _region_path(mask: np.ndarray) -> str:
+def _region_path(mask: np.ndarray, importance_map: np.ndarray | None = None) -> str:
     """All contours (outer + holes) of a color mask as one even-odd path."""
-    return "".join(_subpath(c) for c in contours.smoothed_contours(mask))
+    return "".join(
+        _subpath(c) for c in contours.smoothed_contours(mask, importance_map=importance_map)
+    )
 
 
 def to_svg(
@@ -37,6 +39,7 @@ def to_svg(
     *,
     min_label_radius: float = 6.0,
     stroke_px: float | None = None,
+    importance_map: np.ndarray | None = None,
 ) -> str:
     """Return an SVG string: white regions, black outlines, region numbers."""
     h, w = label_img.shape
@@ -56,7 +59,7 @@ def to_svg(
         if not mask.any():
             continue
 
-        path_d = _region_path(mask)
+        path_d = _region_path(mask, importance_map=importance_map)
         if path_d:
             path = dwg.path(d=path_d, fill_rule="evenodd")
             # Per-color hooks so the UI can highlight one number's regions: a

@@ -39,6 +39,11 @@ class Segmentation:
     region_map_url: str | None = None
     painted_preview_url: str | None = None
     svg_url: str | None = None
+    # Detail-importance map from segment() (None when SUBJECT_AWARE is off).
+    # Persisted here (not just a local var in segment()) so a later re-export
+    # (export.py) reuses the same per-contour epsilon without re-running
+    # rembg/face detection.
+    importance_map: np.ndarray | None = None
 
 
 @dataclass

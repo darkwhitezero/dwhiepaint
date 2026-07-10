@@ -9,14 +9,19 @@ from . import contours, numbering
 from .cache import PaletteEntry
 
 
-def _draw_smoothed_outlines(canvas: np.ndarray, label_img: np.ndarray, thickness: int) -> None:
+def _draw_smoothed_outlines(
+    canvas: np.ndarray,
+    label_img: np.ndarray,
+    thickness: int,
+    importance_map: np.ndarray | None = None,
+) -> None:
     """Draw simplified + Chaikin-smoothed per-label contours (see ``contours``),
     so on-screen line art matches the SVG's smooth outlines rather than the raw
     pixel-diff staircase a boundary walk would produce.
     """
     for lbl in np.unique(label_img):
         mask = (label_img == lbl).astype(np.uint8)
-        for c in contours.smoothed_contours(mask):
+        for c in contours.smoothed_contours(mask, importance_map=importance_map):
             pts = np.round(c).astype(np.int32).reshape(-1, 1, 2)
             cv2.polylines(
                 canvas, [pts], isClosed=True, color=(0, 0, 0),
@@ -31,12 +36,13 @@ def line_art(
     thickness: int = 1,
     min_label_radius: float = 6.0,
     draw_numbers: bool = True,
+    importance_map: np.ndarray | None = None,
 ) -> np.ndarray:
     """Compose an RGB uint8 canvas: white background, smoothed black outlines + numbers."""
     h, w = label_img.shape
     canvas = np.full((h, w, 3), 255, dtype=np.uint8)
 
-    _draw_smoothed_outlines(canvas, label_img, thickness)
+    _draw_smoothed_outlines(canvas, label_img, thickness, importance_map=importance_map)
 
     if draw_numbers:
         for entry in palette:

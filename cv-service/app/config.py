@@ -63,6 +63,20 @@ AUTO_K_DOMINANCE_THRESHOLD = float(os.getenv("AUTO_K_DOMINANCE_THRESHOLD", "0.6"
 SLIC_COMPACTNESS = float(os.getenv("SLIC_COMPACTNESS", "6.0"))
 SLIC_SIGMA = float(os.getenv("SLIC_SIGMA", "1.0"))
 
+# Edge-aware region merging: discount a neighbor's merge score when the shared
+# border sits on a real image edge (high Sobel gradient), so small regions
+# prefer to merge across weak/blurry borders and are reluctant to cross sharp
+# ones. 0 disables the term entirely (pre-existing border-length + CIEDE2000
+# behavior only). Independent of SUBJECT_AWARE — merging must behave the same
+# whether or not the subject-aware pipeline is enabled.
+MERGE_EDGE_WEIGHT = float(os.getenv("MERGE_EDGE_WEIGHT", "1.5"))
+
+# Palette legend readability: after building the palette, adjacent (dark→light
+# sorted) entries closer than this CIEDE2000 distance are nudged apart along L
+# so two different numbers read as visually distinct swatches. Same order of
+# magnitude as paints.DIRECT_MATCH_THRESHOLD.
+PALETTE_MIN_SEPARATION_DELTA_E = float(os.getenv("PALETTE_MIN_SEPARATION_DELTA_E", "6.0"))
+
 # Morphological open/close on the label map before region extraction, to shed
 # single-pixel ragged edges left by quantization (kernel in px at working res).
 MORPH_KERNEL = int(os.getenv("MORPH_KERNEL", "3"))
@@ -97,6 +111,10 @@ def detail_preset(name: str | None) -> dict:
 CONTOUR_SIMPLIFY_EPS = float(os.getenv("CONTOUR_SIMPLIFY_EPS", "0.0015"))
 CONTOUR_SIMPLIFY_MAX_PX = float(os.getenv("CONTOUR_SIMPLIFY_MAX_PX", "1.5"))
 CONTOUR_SMOOTH_ITERS = int(os.getenv("CONTOUR_SMOOTH_ITERS", "0"))
+# Finer epsilon fraction used on high-importance contours (subject/edges/faces)
+# instead of the coarser CONTOUR_SIMPLIFY_EPS above — see contours._contour_eps_frac.
+# Still subject to the same absolute CONTOUR_SIMPLIFY_MAX_PX cap.
+CONTOUR_SIMPLIFY_EPS_DETAIL = float(os.getenv("CONTOUR_SIMPLIFY_EPS_DETAIL", "0.0004"))
 
 # Gaussian-argmax smoothing of the final label map: blur each color's
 # membership and re-assign each pixel to the strongest nearby color. This

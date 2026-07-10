@@ -7,7 +7,7 @@ from typing import Callable
 
 import cv2
 import numpy as np
-from skimage.color import rgb2lab
+from skimage.color import deltaE_ciede2000, lab2rgb, rgb2lab
 
 from . import config, importance, render, storage, superpixels, vectorize
 from .cache import ImageEntry, PaletteEntry, Segmentation
@@ -71,8 +71,12 @@ def segment(
         if imp_map is not None
         else base_min_area
     )
+    # Edge-aware merge bias: computed independently of SUBJECT_AWARE/imp_map so
+    # merging behaves the same whether or not the subject-aware pipeline runs.
+    gradient_mag = _gradient_magnitude(entry.rgb) if config.MERGE_EDGE_WEIGHT > 0 else None
     cleaned = merge_small_regions(
         region_id, region_cluster, areas, min_area, cluster_lab=centroids,
+        gradient_mag=gradient_mag,
     )
 
     # Round staircased boundaries on the label map itself (not per-contour), so
@@ -82,20 +86,20 @@ def segment(
 
     idx_img, palette = _build_palette(cleaned, entry.rgb)
 
-    seg = Segmentation(k=k, label_img=idx_img, palette=palette)
+    seg = Segmentation(k=k, label_img=idx_img, palette=palette, importance_map=imp_map)
     entry.segmentation = seg
 
     # Three artifacts from the one label map: raster line art (fast on-screen),
     # a painted-preview PNG ("what it'll look like done"), and the canonical
     # scalable SVG line art.
     report("render", 0.78)
-    canvas = render.line_art(idx_img, palette, thickness=1)
+    canvas = render.line_art(idx_img, palette, thickness=1, importance_map=imp_map)
     seg.region_map_url = storage.save_rgb_png(entry.image_id, "regions.png", canvas)
     preview = render.painted_preview(idx_img, palette)
     seg.painted_preview_url = storage.save_rgb_png(entry.image_id, "preview_painted.png", preview)
 
     report("vectorize", 0.9)
-    svg = vectorize.to_svg(idx_img, palette)
+    svg = vectorize.to_svg(idx_img, palette, importance_map=imp_map)
     seg.svg_url = storage.save_text(entry.image_id, "regions.svg", svg)
 
     report("done", 1.0)
@@ -145,6 +149,25 @@ def _region_min_area(
     return np.maximum(config.MIN_AREA_HARD_FLOOR, out).astype(np.float64)
 
 
+def _gradient_magnitude(rgb: np.ndarray) -> np.ndarray:
+    """Local edge strength (normalized [0,1] Sobel magnitude), used to bias
+    region merging away from crossing real image edges (see
+    ``merge_small_regions``'s ``gradient_mag``). Deliberately independent of
+    ``importance._edge_saliency``: that one widens/blurs edges into a
+    protected band for min-area purposes and is gated behind SUBJECT_AWARE;
+    this is the raw, un-widened local gradient, needed unconditionally so
+    merge behavior doesn't change when subject-aware mode is off.
+    """
+    gray = cv2.cvtColor(rgb, cv2.COLOR_RGB2GRAY).astype(np.float32)
+    gx = cv2.Sobel(gray, cv2.CV_32F, 1, 0, ksize=3)
+    gy = cv2.Sobel(gray, cv2.CV_32F, 0, 1, ksize=3)
+    mag = cv2.magnitude(gx, gy)
+    hi = float(np.percentile(mag, 98))  # robust max: ignore rare spikes
+    if hi <= 1e-6:
+        return np.zeros_like(mag)
+    return np.clip(mag / hi, 0.0, 1.0)
+
+
 def connected_regions(
     labels: np.ndarray, k: int
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
@@ -172,8 +195,16 @@ def connected_regions(
     return region_id, np.asarray(region_cluster, dtype=np.int32), areas
 
 
-def _adjacency(region_id: np.ndarray, num_regions: int) -> dict[int, dict[int, int]]:
-    """Shared-border length between neighboring regions (4-connectivity)."""
+def _adjacency(
+    region_id: np.ndarray,
+    num_regions: int,
+    gradient_mag: np.ndarray | None = None,
+) -> tuple[dict[int, dict[int, int]], dict[int, dict[int, float]] | None]:
+    """Shared-border length between neighboring regions (4-connectivity), and
+    — when ``gradient_mag`` is given — the mean edge-gradient magnitude along
+    that same shared border, from the identical pixel-pair pass (no extra
+    O(H*W) loop).
+    """
     a = np.concatenate([region_id[:, :-1].ravel(), region_id[:-1, :].ravel()])
     b = np.concatenate([region_id[:, 1:].ravel(), region_id[1:, :].ravel()])
     diff = a != b
@@ -189,7 +220,22 @@ def _adjacency(region_id: np.ndarray, num_regions: int) -> dict[int, dict[int, i
     for l, hgh, cnt in zip(los, his, counts):
         adj.setdefault(int(l), {})[int(hgh)] = int(cnt)
         adj.setdefault(int(hgh), {})[int(l)] = int(cnt)
-    return adj
+
+    if gradient_mag is None:
+        return adj, None
+
+    # Mean of the two pixels straddling each border pixel-pair, aggregated per
+    # region-pair the same way border length is above.
+    ga = np.concatenate([gradient_mag[:, :-1].ravel(), gradient_mag[:-1, :].ravel()])
+    gb = np.concatenate([gradient_mag[:, 1:].ravel(), gradient_mag[1:, :].ravel()])
+    g = ((ga + gb) / 2.0)[diff]
+    sums = np.bincount(key, weights=g)
+    grad_adj: dict[int, dict[int, float]] = {}
+    for l, hgh, cnt in zip(los, his, counts):
+        mean_g = float(sums[int(l) * num_regions + int(hgh)] / cnt) if cnt else 0.0
+        grad_adj.setdefault(int(l), {})[int(hgh)] = mean_g
+        grad_adj.setdefault(int(hgh), {})[int(l)] = mean_g
+    return adj, grad_adj
 
 
 def merge_small_regions(
@@ -198,6 +244,7 @@ def merge_small_regions(
     areas: np.ndarray,
     min_area: int | float | np.ndarray,
     cluster_lab: np.ndarray | None = None,
+    gradient_mag: np.ndarray | None = None,
 ) -> np.ndarray:
     """Absorb every region below its minimum area into a well-matched neighbor.
 
@@ -206,8 +253,13 @@ def merge_small_regions(
     borders are comparable in length (e.g. a thin hair strand between two
     similarly-sized regions). When ``cluster_lab`` (per-cluster Lab
     centroids, e.g. ``KMeans.cluster_centers_``) is given, the border score
-    is discounted by how far the neighbor's color is — among comparable
-    borders this prefers the perceptually closer-colored neighbor.
+    is discounted by how far the neighbor's color is (CIEDE2000) — among
+    comparable borders this prefers the perceptually closer-colored neighbor.
+    When ``gradient_mag`` (full-image HxW Sobel-magnitude, see
+    ``_gradient_magnitude``) is also given, the score is further discounted by
+    the mean edge strength along the shared border — a small region prefers to
+    merge across a weak/blurry border over a crisp real edge, at equal color
+    distance and border length.
 
     ``min_area`` may be a scalar (uniform threshold) or a per-region array
     indexed by region id (Phase 7 subject-aware detail: keep small important
@@ -221,7 +273,7 @@ def merge_small_regions(
     parent = list(range(r))
     size = areas.tolist()
     cluster = region_cluster.tolist()
-    adj = _adjacency(region_id, r)
+    adj, grad_adj = _adjacency(region_id, r, gradient_mag)
 
     scalar = np.isscalar(min_area)
     thr = None if scalar else np.asarray(min_area, dtype=np.float64).copy()
@@ -229,11 +281,25 @@ def merge_small_regions(
     def region_thr(reg: int) -> float:
         return float(min_area) if scalar else float(thr[reg])
 
+    # Precompute pairwise CIEDE2000 between cluster centroids once (k is small,
+    # typically 8-32) rather than a fresh distance calc on every scorer call
+    # inside the merge heap loop below.
+    dist_matrix = None
+    if cluster_lab is not None:
+        kk = cluster_lab.shape[0]
+        a_lab = np.repeat(cluster_lab, kk, axis=0)
+        b_lab = np.tile(cluster_lab, (kk, 1))
+        dist_matrix = deltaE_ciede2000(a_lab, b_lab).reshape(kk, kk)
+
     def neighbor_score(reg: int, n: int, border: int) -> float:
         if cluster_lab is None:
             return float(border)
-        dist = float(np.linalg.norm(cluster_lab[cluster[reg]] - cluster_lab[cluster[n]]))
-        return border / (1.0 + dist)
+        dist = float(dist_matrix[cluster[reg], cluster[n]])
+        score = border / (1.0 + dist)
+        if grad_adj is not None:
+            grad = grad_adj.get(reg, {}).get(n, 0.0)
+            score /= 1.0 + config.MERGE_EDGE_WEIGHT * grad
+        return score
 
     def find(x: int) -> int:
         root = x
@@ -282,6 +348,36 @@ def merge_small_regions(
     return root_cluster[region_id]
 
 
+def _separate_similar_colors(labs: list[np.ndarray]) -> list[np.ndarray]:
+    """Nudge visually-too-similar ADJACENT palette entries (already sorted
+    dark→light by the caller) apart along L, so two different numbers read as
+    distinct swatches on the legend/painted preview.
+
+    Single left-to-right sweep: each entry is pushed lighter only until it
+    clears CIEDE2000 separation from the PREVIOUS (already-finalized, never
+    revisited) entry. This is simpler and more stable than an all-pairs
+    repulsion pass — no oscillation, terminates in bounded steps — and is
+    sufficient since near-duplicate colors from k-means are almost always
+    adjacent once sorted by lightness. Only the DISPLAYED color changes; the
+    segmentation (which pixels belong to which region) is already final by
+    this point in the pipeline.
+    """
+    if len(labs) < 2:
+        return labs
+    out = [lab.copy() for lab in labs]
+    threshold = config.PALETTE_MIN_SEPARATION_DELTA_E
+    step, max_iters = 1.0, 20
+    for i in range(1, len(out)):
+        prev, cur = out[i - 1], out[i]
+        for _ in range(max_iters):
+            d = float(deltaE_ciede2000(prev.reshape(1, 3), cur.reshape(1, 3))[0])
+            if d >= threshold:
+                break
+            cur[0] = np.clip(cur[0] + step, 0.0, 100.0)
+        out[i] = cur
+    return out
+
+
 def _build_palette(
     cleaned: np.ndarray, rgb: np.ndarray
 ) -> tuple[np.ndarray, list[PaletteEntry]]:
@@ -296,13 +392,16 @@ def _build_palette(
     # Order legend from dark to light for readability.
     means.sort(key=lambda cm: cm[1].mean())
 
+    labs = [rgb2lab(mean_rgb.reshape(1, 1, 3) / 255.0).reshape(3) for _, mean_rgb in means]
+    labs = _separate_similar_colors(labs)
+
     remap = np.full(int(present.max()) + 1, -1, dtype=np.int32)
     palette: list[PaletteEntry] = []
-    for new_idx, (old_c, mean_rgb) in enumerate(means):
+    for new_idx, ((old_c, _), lab) in enumerate(zip(means, labs)):
         remap[old_c] = new_idx
-        rgb_u8 = np.clip(np.round(mean_rgb), 0, 255).astype(int)
+        rgb_f = np.clip(lab2rgb(lab.reshape(1, 1, 3)).reshape(3), 0.0, 1.0)
+        rgb_u8 = np.round(rgb_f * 255).astype(int)
         hex_str = "#{:02X}{:02X}{:02X}".format(*rgb_u8)
-        lab = rgb2lab(mean_rgb.reshape(1, 1, 3) / 255.0).reshape(3)
         name_ru, name_en = name_for_lab(lab)
         palette.append(
             PaletteEntry(
