@@ -211,8 +211,11 @@ def _adjacency(
     lo = np.minimum(a[diff], b[diff])
     hi = np.maximum(a[diff], b[diff])
 
+    # `key` can be astronomically large (up to ~num_regions**2) on a busy image
+    # with hundreds of thousands of tiny regions (e.g. pure noise) — np.unique
+    # sorts rather than allocating a dense array, so it stays safe regardless.
     key = lo * num_regions + hi
-    uniq, counts = np.unique(key, return_counts=True)
+    uniq, inverse, counts = np.unique(key, return_inverse=True, return_counts=True)
     los = (uniq // num_regions).astype(int)
     his = (uniq % num_regions).astype(int)
 
@@ -225,14 +228,16 @@ def _adjacency(
         return adj, None
 
     # Mean of the two pixels straddling each border pixel-pair, aggregated per
-    # region-pair the same way border length is above.
+    # region-pair the same way border length is above. Bincount over `inverse`
+    # (range [0, len(uniq))), NOT over `key` itself — key's range scales with
+    # num_regions**2 and would blow up bincount's dense allocation.
     ga = np.concatenate([gradient_mag[:, :-1].ravel(), gradient_mag[:-1, :].ravel()])
     gb = np.concatenate([gradient_mag[:, 1:].ravel(), gradient_mag[1:, :].ravel()])
     g = ((ga + gb) / 2.0)[diff]
-    sums = np.bincount(key, weights=g)
+    sums = np.bincount(inverse, weights=g, minlength=len(uniq))
     grad_adj: dict[int, dict[int, float]] = {}
-    for l, hgh, cnt in zip(los, his, counts):
-        mean_g = float(sums[int(l) * num_regions + int(hgh)] / cnt) if cnt else 0.0
+    for idx, (l, hgh, cnt) in enumerate(zip(los, his, counts)):
+        mean_g = float(sums[idx] / cnt) if cnt else 0.0
         grad_adj.setdefault(int(l), {})[int(hgh)] = mean_g
         grad_adj.setdefault(int(hgh), {})[int(l)] = mean_g
     return adj, grad_adj
