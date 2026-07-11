@@ -63,6 +63,41 @@ AUTO_K_DOMINANCE_THRESHOLD = float(os.getenv("AUTO_K_DOMINANCE_THRESHOLD", "0.6"
 SLIC_COMPACTNESS = float(os.getenv("SLIC_COMPACTNESS", "6.0"))
 SLIC_SIGMA = float(os.getenv("SLIC_SIGMA", "1.0"))
 
+# Palette accent seeding: plain area-weighted k-means over superpixel means
+# can dissolve a small-but-highly-contrasting population (pure-white daisies
+# against a warm sunset field) into the nearest big warm cluster — the visual
+# accent the eye locks onto is lost (see docs/issues/landscape-quality,
+# Problem 2). If a near-white superpixel population is large enough AND far
+# enough (by CIEDE2000) from where plain k-means would already place a
+# centroid, seed one fixed initial centroid at its mean instead of letting it
+# get diluted — k is unchanged, one slot is just reserved. On by default with
+# conservative thresholds (large-enough area, clearly-diluted-enough color) so
+# it only fires for a genuine accent like the daisy case; "0"/"false" reverts
+# to the exact prior KMeans(random_state=42, n_init=3) call byte-for-byte.
+PALETTE_ACCENT_SEEDING = os.getenv("PALETTE_ACCENT_SEEDING", "1") not in ("0", "false", "False")
+# Near-white test on superpixel mean Lab: L above this, chroma (sqrt(a^2+b^2))
+# below this. Verified against a real photo (docs/issues/landscape-quality's
+# daisy-field test image, golden-hour lighting): actual white-petal
+# superpixels there sit at L~92-93 with chroma~16-20 (warm color cast from
+# the light, not neutral gray-white) — a chroma cutoff of 12 (studio-neutral
+# "white") never matched any of them. 22 comfortably covers that real-world
+# range while still excluding genuinely saturated warm tones (the sunset sky
+# around it runs chroma 25+).
+PALETTE_ACCENT_L_MIN = float(os.getenv("PALETTE_ACCENT_L_MIN", "88.0"))
+PALETTE_ACCENT_CHROMA_MAX = float(os.getenv("PALETTE_ACCENT_CHROMA_MAX", "22.0"))
+# Minimum share of total (superpixel-area-weighted) image area the near-white
+# population must cover to earn a reserved slot — small specular highlights
+# shouldn't hijack a centroid, only a genuine visual accent should.
+PALETTE_ACCENT_MIN_AREA_FRAC = float(os.getenv("PALETTE_ACCENT_MIN_AREA_FRAC", "0.01"))
+# Only seed if plain kmeans++ would land its nearest centroid at least this
+# far (CIEDE2000) from the accent's true mean — i.e. only intervene when the
+# accent would actually get diluted.
+PALETTE_ACCENT_DELTA_E = float(os.getenv("PALETTE_ACCENT_DELTA_E", "8.0"))
+# Cap on how many accent slots can be reserved in one image (near-white is
+# the only population checked today, so effectively 0 or 1, but keep this a
+# tunable ceiling rather than a hardcoded assumption).
+PALETTE_ACCENT_MAX_SLOTS = int(os.getenv("PALETTE_ACCENT_MAX_SLOTS", "1"))
+
 # Edge-aware region merging: discount a neighbor's merge score when the shared
 # border sits on a real image edge (high Sobel gradient), so small regions
 # prefer to merge across weak/blurry borders and are reluctant to cross sharp
@@ -70,6 +105,18 @@ SLIC_SIGMA = float(os.getenv("SLIC_SIGMA", "1.0"))
 # behavior only). Independent of SUBJECT_AWARE — merging must behave the same
 # whether or not the subject-aware pipeline is enabled.
 MERGE_EDGE_WEIGHT = float(os.getenv("MERGE_EDGE_WEIGHT", "1.5"))
+
+# Elongated-region merge bias: a thin, wiggly region (a flower stem fragment,
+# a hair strand) is unpaintable even when its raw area clears min_area — the
+# label just won't fit and the "region" reads as a scatter of same-color
+# specks rather than one paintable shape. Regions whose shape factor
+# (perimeter^2 / (4*pi*area), 1.0 for a circle, large for slivers) exceeds
+# this threshold get their effective min_area scaled up by
+# MERGE_ELONGATION_MIN_AREA_MULT, so they keep merging into a neighbor until
+# they've fattened into something a person can actually fill in. 1.0 (mult)
+# disables the term entirely (pre-existing behavior, unchanged).
+MERGE_ELONGATION_SHAPE_THRESHOLD = float(os.getenv("MERGE_ELONGATION_SHAPE_THRESHOLD", "4.0"))
+MERGE_ELONGATION_MIN_AREA_MULT = float(os.getenv("MERGE_ELONGATION_MIN_AREA_MULT", "2.5"))
 
 # Palette legend readability: after building the palette, adjacent (dark→light
 # sorted) entries closer than this CIEDE2000 distance are nudged apart along L
@@ -149,6 +196,28 @@ IMPORTANCE_EDGE_DILATE_FRAC = float(os.getenv("IMPORTANCE_EDGE_DILATE_FRAC", "0.
 # background decorations (stars, hearts, text) still survive — only flat
 # background is simplified (0 = no damping, 1 = full).
 IMPORTANCE_BG_EDGE_DAMP = float(os.getenv("IMPORTANCE_BG_EDGE_DAMP", "0.2"))
+# On a subject-LESS image the damp term above never runs at all, so a busy
+# background (a whole field of flowers, foliage, water ripples) reads as
+# uniformly "important" and the per-region min-area collapses to
+# MIN_AREA_DETAIL_PX everywhere: hundreds of unpaintable micro-regions (see
+# docs/issues/landscape-quality, Problem 1). This applies the same kind of
+# damping globally in that case, so texture-only busyness no longer
+# monopolizes the whole detail budget. Higher = more aggressive
+# simplification of subjectless-image texture (0 = current behavior,
+# unchanged).
+#
+# "Subject-less" is NOT just matte.subject_mask returning None (SUBJECT_AWARE
+# off / image too small / rembg unavailable) — verified on a real photo
+# (docs/issues/landscape-quality's daisy-field test image) that rembg (u2net)
+# almost always returns a *non-None* mask, but on a scene with no single
+# salient foreground object that mask is essentially all-zero (mean well
+# under 1%) rather than actually None. Both cases mean "no real subject was
+# found" and must trigger the same global damping — see
+# IMPORTANCE_SUBJECT_MIN_MEAN below.
+IMPORTANCE_NO_SUBJECT_EDGE_DAMP = float(os.getenv("IMPORTANCE_NO_SUBJECT_EDGE_DAMP", "0.6"))
+# Minimum mean alpha for a rembg mask to count as "a real subject was found".
+# Below this, the mask is treated the same as alpha=None (see above).
+IMPORTANCE_SUBJECT_MIN_MEAN = float(os.getenv("IMPORTANCE_SUBJECT_MIN_MEAN", "0.02"))
 
 # Map per-region mean importance in [LOW, HIGH] to an ABSOLUTE minimum paintable
 # area: low importance → the preset's (large) base area, so flat background

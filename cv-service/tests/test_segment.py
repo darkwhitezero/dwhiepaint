@@ -115,6 +115,46 @@ def test_merge_gradient_term_is_noop_without_gradient_mag():
     assert np.all(cleaned[:, 1] == 1)
 
 
+def test_merge_elongation_forces_thin_sliver_but_spares_compact_region(monkeypatch):
+    """A thin, wiggly-shaped micro-region (a flower-stem fragment) must merge
+    away even when its raw area already clears min_area, because its shape
+    alone makes it unpaintable (docs/issues/landscape-quality, Problem 1); an
+    equal-area COMPACT region under the same threshold must be left alone.
+    """
+    from app import config
+    monkeypatch.setattr(config, "MERGE_ELONGATION_MIN_AREA_MULT", 2.5)
+    monkeypatch.setattr(config, "MERGE_ELONGATION_SHAPE_THRESHOLD", 4.0)
+
+    h, w = 20, 40
+    labels = np.zeros((h, w), dtype=np.int32)  # cluster 0 = background
+    labels[5, 2:18] = 1     # thin 16px-long, 1px-wide line -> cluster 1
+    labels[10:14, 2:6] = 2  # compact 4x4 block (also 16px) -> cluster 2
+
+    region_id, region_cluster, areas = segment.connected_regions(labels, 3)
+    cleaned = segment.merge_small_regions(region_id, region_cluster, areas, min_area=10)
+
+    assert not np.any(cleaned == 1)  # thin sliver merged away despite area >= min_area
+    assert np.any(cleaned == 2)      # compact region of the same area survives
+
+
+def test_merge_elongation_disabled_leaves_thin_sliver_alone(monkeypatch):
+    """MULT<=1.0 must reproduce pre-Phase-17 behavior: raw area alone decides,
+    so the same thin sliver (area already >= min_area) is left untouched.
+    """
+    from app import config
+    monkeypatch.setattr(config, "MERGE_ELONGATION_MIN_AREA_MULT", 1.0)
+
+    h, w = 20, 40
+    labels = np.zeros((h, w), dtype=np.int32)
+    labels[5, 2:18] = 1
+    labels[10:14, 2:6] = 2
+
+    region_id, region_cluster, areas = segment.connected_regions(labels, 3)
+    cleaned = segment.merge_small_regions(region_id, region_cluster, areas, min_area=10)
+
+    assert np.any(cleaned == 1)  # unchanged behavior: raw area already clears min_area
+
+
 def test_palette_separates_near_duplicate_colors():
     """Two regions whose true mean color is nearly identical must still read
     as visually distinct palette entries: after `_build_palette`, adjacent
