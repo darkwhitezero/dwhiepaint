@@ -49,7 +49,15 @@ def importance_map(rgb: np.ndarray) -> tuple[np.ndarray, dict]:
     imp += config.IMPORTANCE_W_EDGE * edges
 
     alpha = matte.subject_mask(rgb)
-    if alpha is not None:
+    # A real subject means BOTH a mask exists AND rembg was actually confident
+    # about something — on a real landscape photo (verified: docs/issues/
+    # landscape-quality's daisy-field test image) rembg almost always returns
+    # a non-None mask even with no coherent foreground object, but that mask
+    # is then essentially all-zero (mean << 1%) rather than actually None. An
+    # `alpha is not None` check alone missed this and never applied the
+    # no-subject damping below on exactly the images it exists for.
+    has_subject = alpha is not None and float(alpha.mean()) >= config.IMPORTANCE_SUBJECT_MIN_MEAN
+    if has_subject:
         imp += config.IMPORTANCE_W_SUBJECT * alpha
         # Outside the subject, damp edge saliency so a busy background doesn't
         # steal the detail budget from the subject.
@@ -57,6 +65,20 @@ def importance_map(rgb: np.ndarray) -> tuple[np.ndarray, dict]:
         imp -= config.IMPORTANCE_BG_EDGE_DAMP * config.IMPORTANCE_W_EDGE * edges * bg
         np.maximum(imp, config.IMPORTANCE_FLOOR, out=imp)
         meta["subject"] = True
+    else:
+        # No real subject (rembg found nothing confident, or matting didn't
+        # run at all — typically a landscape/scene with no single foreground
+        # object). The subject-relative damp above never runs in this branch,
+        # so on a subjectless image whose texture is uniformly high-contrast
+        # (a flower field, foliage, water ripples) the WHOLE frame reads as
+        # "important" and the per-region min-area collapses to the detail
+        # floor everywhere — hundreds of unpaintable micro-regions survive the
+        # merge (docs/issues/landscape-quality, Problem 1). Apply the same
+        # kind of damping globally instead: it's the natural degenerate case
+        # of "outside the subject" when there is no subject, so no separate
+        # subject-vs-background split is needed.
+        imp -= config.IMPORTANCE_NO_SUBJECT_EDGE_DAMP * config.IMPORTANCE_W_EDGE * edges
+        np.maximum(imp, config.IMPORTANCE_FLOOR, out=imp)
 
     boxes = faces.face_boxes(rgb)
     meta["faces"] = len(boxes)

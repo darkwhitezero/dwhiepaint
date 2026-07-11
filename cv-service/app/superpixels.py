@@ -12,8 +12,9 @@ noise-driven ones per-pixel clustering produced.
 from __future__ import annotations
 
 import numpy as np
+from skimage.color import deltaE_ciede2000
 from skimage.segmentation import slic
-from sklearn.cluster import KMeans
+from sklearn.cluster import KMeans, kmeans_plusplus
 
 from . import config
 
@@ -47,6 +48,45 @@ def superpixel_means(lab: np.ndarray, sp: np.ndarray) -> tuple[np.ndarray, np.nd
     return means, area
 
 
+def _accent_seed_lab(means: np.ndarray, area: np.ndarray, k: int) -> np.ndarray | None:
+    """Find a large, visually extreme (near-white) superpixel population that
+    plain area-weighted k-means would likely dilute into a warmer neighbor —
+    e.g. white daisies against a warm sunset field losing their contrast
+    (docs/issues/landscape-quality, Problem 2) — and return its area-weighted
+    mean Lab to seed a reserved centroid. Returns None (no seeding) when the
+    feature is off, no such population exists, it's too small to be a real
+    accent rather than a stray highlight, or a plain fit would already land a
+    centroid near it (nothing to fix).
+    """
+    if not config.PALETTE_ACCENT_SEEDING or k < 2:
+        return None
+
+    L, a, b = means[:, 0], means[:, 1], means[:, 2]
+    chroma = np.sqrt(a ** 2 + b ** 2)
+    near_white = (L >= config.PALETTE_ACCENT_L_MIN) & (chroma <= config.PALETTE_ACCENT_CHROMA_MAX)
+    if not near_white.any():
+        return None
+
+    total_area = float(area.sum())
+    accent_area = float(area[near_white].sum())
+    if total_area <= 0 or accent_area / total_area < config.PALETTE_ACCENT_MIN_AREA_FRAC:
+        return None
+
+    accent_lab = np.average(means[near_white], axis=0, weights=area[near_white])
+
+    # Would an unseeded fit already place a centroid near the accent? Then
+    # there's nothing to fix — only intervene when it would genuinely dilute.
+    baseline = KMeans(n_clusters=k, random_state=42, n_init=3)
+    baseline.fit(means, sample_weight=area)
+    dists = deltaE_ciede2000(
+        np.repeat(accent_lab.reshape(1, 3), k, axis=0), baseline.cluster_centers_,
+    )
+    if float(dists.min()) < config.PALETTE_ACCENT_DELTA_E:
+        return None
+
+    return accent_lab
+
+
 def palette_from_superpixels(
     lab: np.ndarray, sp: np.ndarray, k: int
 ) -> tuple[np.ndarray, np.ndarray]:
@@ -59,12 +99,24 @@ def palette_from_superpixels(
     pixel precision instead of the coarse superpixel grid (whose ~grain-sized
     seams would otherwise staircase every outline). Returns (label_map [H,W],
     centroids [k,3] Lab); k is clamped to the superpixel count.
+
+    When a near-white accent population would otherwise be diluted away (see
+    ``_accent_seed_lab``), one centroid is seeded at its mean and the rest via
+    weighted k-means++ (``n_init=1`` since the seed is deterministic); k stays
+    unchanged, one slot is just reserved. Otherwise this is the exact prior
+    ``KMeans(random_state=42, n_init=3)`` call, byte-for-byte.
     """
     means, area = superpixel_means(lab, sp)
     n_sp = means.shape[0]
     k = int(np.clip(k, 2, n_sp))
 
-    km = KMeans(n_clusters=k, random_state=42, n_init=3)
+    accent_lab = _accent_seed_lab(means, area, k)
+    if accent_lab is not None:
+        seeds, _ = kmeans_plusplus(means, k - 1, sample_weight=area, random_state=42)
+        init = np.vstack([seeds, accent_lab.reshape(1, 3)])
+        km = KMeans(n_clusters=k, init=init, n_init=1, random_state=42)
+    else:
+        km = KMeans(n_clusters=k, random_state=42, n_init=3)
     km.fit(means, sample_weight=area)
     centroids = km.cluster_centers_
 

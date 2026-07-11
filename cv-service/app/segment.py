@@ -248,6 +248,48 @@ def _adjacency(
     return adj, grad_adj
 
 
+def _region_perimeters(region_id: np.ndarray, r: int) -> np.ndarray:
+    """Approximate each region's boundary length (pixel-edge count) via a
+    single O(H*W) 4-neighbor comparison pass — cheap and consistent, unlike
+    per-region ``cv2.findContours`` over potentially thousands of regions.
+    Used only for the elongation shape factor below, not for rendering.
+    """
+    h, w = region_id.shape
+    OUT = np.array(-2, dtype=region_id.dtype)  # sentinel: always "different"
+    padded = np.full((h + 2, w + 2), OUT, dtype=region_id.dtype)
+    padded[1:-1, 1:-1] = region_id
+    center = padded[1:-1, 1:-1]
+    perim = np.zeros(r, dtype=np.float64)
+    for dy, dx in ((-1, 0), (1, 0), (0, -1), (0, 1)):
+        neighbor = padded[1 + dy:1 + dy + h, 1 + dx:1 + dx + w]
+        valid = (neighbor != center) & (center >= 0)
+        perim += np.bincount(center[valid].ravel(), minlength=r)
+    return perim
+
+
+def _elongation_multiplier(region_id: np.ndarray, areas: np.ndarray) -> np.ndarray | None:
+    """Per-region min-area multiplier for badly-elongated slivers (a flower-
+    stem fragment, a hair strand) that stay unpaintable even once their raw
+    area clears ``min_area`` — the shape is too thin to hold a number, and it
+    visually reads as a scatter of same-color specks rather than one region
+    (docs/issues/landscape-quality, Problem 1). Uses an isoperimetric shape
+    factor (perimeter^2 / (4*pi*area): 1.0 for a circle, large for slivers)
+    from the approximate boundary pass above. Returns None when the feature
+    is off (``MERGE_ELONGATION_MIN_AREA_MULT <= 1.0``), so callers can skip
+    the extra O(H*W) pass and the merge stays byte-identical to before this
+    existed.
+    """
+    mult = config.MERGE_ELONGATION_MIN_AREA_MULT
+    if mult <= 1.0:
+        return None
+    r = len(areas)
+    perim = _region_perimeters(region_id, r)
+    shape_factor = perim ** 2 / np.maximum(4.0 * np.pi * areas, 1e-6)
+    out = np.ones(r, dtype=np.float64)
+    out[shape_factor > config.MERGE_ELONGATION_SHAPE_THRESHOLD] = mult
+    return out
+
+
 def merge_small_regions(
     region_id: np.ndarray,
     region_cluster: np.ndarray,
@@ -287,6 +329,16 @@ def merge_small_regions(
 
     scalar = np.isscalar(min_area)
     thr = None if scalar else np.asarray(min_area, dtype=np.float64).copy()
+
+    # Elongated slivers need a higher effective threshold than their raw area
+    # alone would suggest — converts the threshold to a per-region array only
+    # when the feature is actually enabled (see _elongation_multiplier).
+    elong_mult = _elongation_multiplier(region_id, areas)
+    if elong_mult is not None:
+        if scalar:
+            thr = np.full(r, float(min_area), dtype=np.float64)
+            scalar = False
+        thr *= elong_mult
 
     def region_thr(reg: int) -> float:
         return float(min_area) if scalar else float(thr[reg])
