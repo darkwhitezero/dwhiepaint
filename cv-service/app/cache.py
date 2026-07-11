@@ -105,7 +105,13 @@ def load_entry(image_id: str) -> ImageEntry | None:
 
     from . import storage  # local import: storage has no reverse dep on cache
 
-    path = storage.image_dir(image_id) / "preview.png"
+    try:
+        img_dir = storage.image_dir(image_id)
+    except ValueError:
+        # Malformed/hostile image_id (see storage.image_dir) — treat exactly
+        # like "not found" rather than letting it bubble into a 500.
+        return None
+    path = img_dir / "preview.png"
     if not path.exists():
         return None
     bgr = cv2.imread(str(path), cv2.IMREAD_COLOR)
