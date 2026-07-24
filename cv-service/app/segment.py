@@ -423,19 +423,34 @@ def _separate_similar_colors(labs: list[np.ndarray]) -> list[np.ndarray]:
     adjacent once sorted by lightness. Only the DISPLAYED color changes; the
     segmentation (which pixels belong to which region) is already final by
     this point in the pipeline.
+
+    That displayed color is what the painted preview and the printed legend
+    are filled with, so drift here is a lie about the photo. Each entry is
+    therefore held within ``PALETTE_MAX_SHIFT_DELTA_E`` of its OWN true color:
+    the sweep separates where that is free and gives up where it isn't,
+    leaving a collision rather than a visibly wrong swatch. Without that cap
+    a run of near-duplicates ratchets — measured on a real landscape, the
+    brightest entry drifted +12 L (CIEDE2000 7.4 from its true color) because
+    every push compounds into the next entry's starting point.
     """
     if len(labs) < 2:
         return labs
     out = [lab.copy() for lab in labs]
     threshold = config.PALETTE_MIN_SEPARATION_DELTA_E
+    max_drift = config.PALETTE_MAX_SHIFT_DELTA_E
     step, max_iters = 1.0, 20
     for i in range(1, len(out)):
-        prev, cur = out[i - 1], out[i]
+        prev, cur, true_lab = out[i - 1], out[i], labs[i]
         for _ in range(max_iters):
             d = float(deltaE_ciede2000(prev.reshape(1, 3), cur.reshape(1, 3))[0])
             if d >= threshold:
                 break
-            cur[0] = np.clip(cur[0] + step, 0.0, 100.0)
+            nudged = cur.copy()
+            nudged[0] = np.clip(nudged[0] + step, 0.0, 100.0)
+            drift = float(deltaE_ciede2000(nudged.reshape(1, 3), true_lab.reshape(1, 3))[0])
+            if drift > max_drift:
+                break  # separating further would misrepresent the color
+            cur = nudged
         out[i] = cur
     return out
 
@@ -446,20 +461,30 @@ def _build_palette(
     """Reindex present clusters (dark→light) and name each color."""
     present = np.unique(cleaned)
 
-    means: list[tuple[int, np.ndarray]] = []
+    entries: list[tuple[int, np.ndarray]] = []
     for c in present:
         mean_rgb = rgb[cleaned == c].reshape(-1, 3).mean(axis=0)
-        means.append((int(c), mean_rgb))
+        entries.append((int(c), rgb2lab(mean_rgb.reshape(1, 1, 3) / 255.0).reshape(3)))
 
-    # Order legend from dark to light for readability.
-    means.sort(key=lambda cm: cm[1].mean())
+    # Order legend from dark to light for readability — by actual lightness,
+    # not by RGB average. The two disagree: on a real landscape the RGB-mean
+    # order had 6 places where L went *down*, which both broke the ordering
+    # the legend claims and made _separate_similar_colors cascade (each
+    # inversion forces a large push that compounds into every later entry).
+    entries.sort(key=lambda cl: cl[1][0])
 
-    labs = [rgb2lab(mean_rgb.reshape(1, 1, 3) / 255.0).reshape(3) for _, mean_rgb in means]
-    labs = _separate_similar_colors(labs)
+    # Separation nudges entries along L, which can lift one past the neighbour
+    # it was sorted below — so re-sort afterwards and number from THAT order.
+    # Otherwise the printed legend is numbered in one order and drawn in
+    # another, which is the ordering bug this sort exists to prevent.
+    ordered = sorted(
+        zip((old_c for old_c, _ in entries), _separate_similar_colors([lab for _, lab in entries])),
+        key=lambda cl: cl[1][0],
+    )
 
     remap = np.full(int(present.max()) + 1, -1, dtype=np.int32)
     palette: list[PaletteEntry] = []
-    for new_idx, ((old_c, _), lab) in enumerate(zip(means, labs)):
+    for new_idx, (old_c, lab) in enumerate(ordered):
         remap[old_c] = new_idx
         rgb_f = np.clip(lab2rgb(lab.reshape(1, 1, 3)).reshape(3), 0.0, 1.0)
         rgb_u8 = np.round(rgb_f * 255).astype(int)

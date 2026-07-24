@@ -155,27 +155,58 @@ def test_merge_elongation_disabled_leaves_thin_sliver_alone(monkeypatch):
     assert np.any(cleaned == 1)  # unchanged behavior: raw area already clears min_area
 
 
-def test_palette_separates_near_duplicate_colors():
-    """Two regions whose true mean color is nearly identical must still read
-    as visually distinct palette entries: after `_build_palette`, adjacent
-    (dark->light sorted) entries must clear the configured CIEDE2000
-    separation floor, without changing how many colors are in the palette.
+def test_palette_separation_pushes_near_duplicates_apart():
+    """Near-identical colors should still be nudged toward distinctness so two
+    different numbers don't read as the same swatch on the legend.
+    """
+    labs = [np.array([50.0, 0.0, 0.0]), np.array([50.4, 0.0, 0.0])]
+
+    out = segment._separate_similar_colors([lab.copy() for lab in labs])
+
+    before = float(deltaE_ciede2000(labs[0].reshape(1, 3), labs[1].reshape(1, 3))[0])
+    after = float(deltaE_ciede2000(out[0].reshape(1, 3), out[1].reshape(1, 3))[0])
+    assert after > before
+
+
+def test_palette_separation_never_misrepresents_a_color():
+    """The separated color is what the painted preview and the printed legend
+    are actually filled with, so it must never drift further from the color
+    measured in the photo than PALETTE_MAX_SHIFT_DELTA_E — separation gives up
+    and tolerates a collision rather than paint a visibly wrong color.
+
+    Regression guard: a long run of near-duplicates used to ratchet, because
+    each entry only had to clear the PREVIOUS (already-pushed) one. Measured
+    on a real landscape that drove the brightest entry +12 L off its true
+    color.
     """
     from app import config
 
-    h, w = 10, 30
+    labs = [np.array([40.0 + 0.4 * i, 0.0, 0.0]) for i in range(12)]
+
+    out = segment._separate_similar_colors([lab.copy() for lab in labs])
+
+    assert len(out) == len(labs)
+    for original, shown in zip(labs, out):
+        drift = float(deltaE_ciede2000(original.reshape(1, 3), shown.reshape(1, 3))[0])
+        assert drift <= config.PALETTE_MAX_SHIFT_DELTA_E + 1e-6
+
+
+def test_palette_is_ordered_by_true_lightness():
+    """The legend is documented (and drawn) dark->light. Ordering by RGB
+    average only approximates that and is not monotonic in L — on a real photo
+    it inverted in 6 places, which also made the separation sweep cascade.
+    """
+    h, w = 10, 40
     cleaned = np.zeros((h, w), dtype=np.int32)
-    cleaned[:, 10:20] = 1
-    cleaned[:, 20:] = 2
     rgb = np.zeros((h, w, 3), dtype=np.uint8)
-    rgb[:, :10] = (40, 40, 40)          # dark
-    rgb[:, 10:20] = (128, 128, 130)     # mid-gray
-    rgb[:, 20:] = (131, 129, 127)       # near-duplicate mid-gray (barely different)
+    # A saturated blue and a yellow chosen so RGB-average and L disagree:
+    # yellow is far lighter than blue despite a similar channel average.
+    swatches = [(40, 40, 40), (30, 30, 200), (220, 220, 40), (245, 245, 245)]
+    for i, color in enumerate(swatches):
+        cleaned[:, i * 10 : (i + 1) * 10] = i
+        rgb[:, i * 10 : (i + 1) * 10] = color
 
-    idx_img, palette = segment._build_palette(cleaned, rgb)
+    _, palette = segment._build_palette(cleaned, rgb)
 
-    assert len(palette) == 3  # separation must not drop/merge palette entries
-    labs = [np.array(p.lab) for p in palette]
-    for a, b in zip(labs, labs[1:]):
-        d = float(deltaE_ciede2000(a.reshape(1, 3), b.reshape(1, 3))[0])
-        assert d >= config.PALETTE_MIN_SEPARATION_DELTA_E - 1e-6
+    lightness = [p.lab[0] for p in palette]
+    assert lightness == sorted(lightness)

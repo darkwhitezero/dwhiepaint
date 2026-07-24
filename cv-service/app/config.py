@@ -63,40 +63,13 @@ AUTO_K_DOMINANCE_THRESHOLD = float(os.getenv("AUTO_K_DOMINANCE_THRESHOLD", "0.6"
 SLIC_COMPACTNESS = float(os.getenv("SLIC_COMPACTNESS", "6.0"))
 SLIC_SIGMA = float(os.getenv("SLIC_SIGMA", "1.0"))
 
-# Palette accent seeding: plain area-weighted k-means over superpixel means
-# can dissolve a small-but-highly-contrasting population (pure-white daisies
-# against a warm sunset field) into the nearest big warm cluster — the visual
-# accent the eye locks onto is lost (see docs/issues/landscape-quality,
-# Problem 2). If a near-white superpixel population is large enough AND far
-# enough (by CIEDE2000) from where plain k-means would already place a
-# centroid, seed one fixed initial centroid at its mean instead of letting it
-# get diluted — k is unchanged, one slot is just reserved. On by default with
-# conservative thresholds (large-enough area, clearly-diluted-enough color) so
-# it only fires for a genuine accent like the daisy case; "0"/"false" reverts
-# to the exact prior KMeans(random_state=42, n_init=3) call byte-for-byte.
-PALETTE_ACCENT_SEEDING = os.getenv("PALETTE_ACCENT_SEEDING", "1") not in ("0", "false", "False")
-# Near-white test on superpixel mean Lab: L above this, chroma (sqrt(a^2+b^2))
-# below this. Verified against a real photo (docs/issues/landscape-quality's
-# daisy-field test image, golden-hour lighting): actual white-petal
-# superpixels there sit at L~92-93 with chroma~16-20 (warm color cast from
-# the light, not neutral gray-white) — a chroma cutoff of 12 (studio-neutral
-# "white") never matched any of them. 22 comfortably covers that real-world
-# range while still excluding genuinely saturated warm tones (the sunset sky
-# around it runs chroma 25+).
-PALETTE_ACCENT_L_MIN = float(os.getenv("PALETTE_ACCENT_L_MIN", "88.0"))
-PALETTE_ACCENT_CHROMA_MAX = float(os.getenv("PALETTE_ACCENT_CHROMA_MAX", "22.0"))
-# Minimum share of total (superpixel-area-weighted) image area the near-white
-# population must cover to earn a reserved slot — small specular highlights
-# shouldn't hijack a centroid, only a genuine visual accent should.
-PALETTE_ACCENT_MIN_AREA_FRAC = float(os.getenv("PALETTE_ACCENT_MIN_AREA_FRAC", "0.01"))
-# Only seed if plain kmeans++ would land its nearest centroid at least this
-# far (CIEDE2000) from the accent's true mean — i.e. only intervene when the
-# accent would actually get diluted.
-PALETTE_ACCENT_DELTA_E = float(os.getenv("PALETTE_ACCENT_DELTA_E", "8.0"))
-# Cap on how many accent slots can be reserved in one image (near-white is
-# the only population checked today, so effectively 0 or 1, but keep this a
-# tunable ceiling rather than a hardcoded assumption).
-PALETTE_ACCENT_MAX_SLOTS = int(os.getenv("PALETTE_ACCENT_MAX_SLOTS", "1"))
+# NOTE: an earlier attempt at Problem 2 reserved a k-means seed for a
+# near-white "accent" population (white daisies against a warm field). It was
+# measured across all seven gallery/test images and fired on ZERO of them:
+# plain area-weighted k-means already lands a centroid ~0.6 CIEDE2000 from
+# that population, so there was nothing to rescue. The real defect turned out
+# to be palette FIDELITY (see PALETTE_MAX_SHIFT_DELTA_E below), not centroid
+# placement. Removed rather than left as dead configuration.
 
 # Edge-aware region merging: discount a neighbor's merge score when the shared
 # border sits on a real image edge (high Sobel gradient), so small regions
@@ -123,6 +96,14 @@ MERGE_ELONGATION_MIN_AREA_MULT = float(os.getenv("MERGE_ELONGATION_MIN_AREA_MULT
 # so two different numbers read as visually distinct swatches. Same order of
 # magnitude as paints.DIRECT_MATCH_THRESHOLD.
 PALETTE_MIN_SEPARATION_DELTA_E = float(os.getenv("PALETTE_MIN_SEPARATION_DELTA_E", "6.0"))
+# Hard ceiling on how far that separation may move an entry from its own true
+# color. The separated color is what the painted preview and the printed
+# legend are filled with, so drift is a lie about the photo — and it must stay
+# under the ~2.3 CIEDE2000 just-noticeable-difference. Uncapped, a run of
+# near-duplicate colors ratchets: measured on a real landscape, the brightest
+# entry drifted +12 L (dE 7.4 from truth). Separation now gives up and leaves
+# a collision rather than paint a visibly wrong color.
+PALETTE_MAX_SHIFT_DELTA_E = float(os.getenv("PALETTE_MAX_SHIFT_DELTA_E", "2.5"))
 
 # Morphological open/close on the label map before region extraction, to shed
 # single-pixel ragged edges left by quantization (kernel in px at working res).
