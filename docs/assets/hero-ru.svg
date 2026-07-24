@@ -1,0 +1,101 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 340" width="100%" role="img" aria-label="dwhiepaint — раскраска по номерам из фото. Три этапа: исходное фото, нумерованный контур, закрашенный результат.">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#161B26"/>
+      <stop offset="1" stop-color="#0B0E14"/>
+    </linearGradient>
+    <radialGradient id="auroraWarm" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#E8998D" stop-opacity="0.34"/>
+      <stop offset="1" stop-color="#E8998D" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="auroraCool" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#7C8CE0" stop-opacity="0.30"/>
+      <stop offset="1" stop-color="#7C8CE0" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="auroraGold" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#F5C97A" stop-opacity="0.22"/>
+      <stop offset="1" stop-color="#F5C97A" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#EFAF87"/>
+      <stop offset="0.6" stop-color="#F6D49B"/>
+      <stop offset="1" stop-color="#F7E6BC"/>
+    </linearGradient>
+    <clipPath id="clipA"><rect x="600" y="64" width="150" height="150" rx="18"/></clipPath>
+    <clipPath id="clipB"><rect x="790" y="64" width="150" height="150" rx="18"/></clipPath>
+    <clipPath id="clipC"><rect x="980" y="64" width="150" height="150" rx="18"/></clipPath>
+  </defs>
+
+  <rect x="0" y="0" width="1200" height="340" rx="28" fill="url(#bg)"/>
+  <ellipse cx="250" cy="70" rx="420" ry="260" fill="url(#auroraWarm)"/>
+  <ellipse cx="1010" cy="300" rx="430" ry="250" fill="url(#auroraCool)"/>
+  <ellipse cx="700" cy="30" rx="360" ry="200" fill="url(#auroraGold)"/>
+  <rect x="0.5" y="0.5" width="1199" height="339" rx="28" fill="none" stroke="#FFFFFF" stroke-opacity="0.10"/>
+
+  <!-- Wordmark + positioning -->
+  <text x="70" y="126" font-family="Georgia, 'Iowan Old Style', 'Palatino Linotype', serif" font-size="74" fill="#F7F4EF">dwhiepaint</text>
+  <text x="72" y="174" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="25" fill="#C7CEDB">Раскраска по номерам из фото</text>
+  <text x="72" y="208" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="18" fill="#7C879B">SLIC · rembg · CIEDE2000 · вектор</text>
+
+  <!-- Legend chips: the product's own "number to colour" motif -->
+  <g font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="20" text-anchor="middle">
+    <rect x="70"  y="240" width="62" height="38" rx="10" fill="#5C7150"/><text x="101" y="265" fill="#F2F5EE">1</text>
+    <rect x="142" y="240" width="62" height="38" rx="10" fill="#8FA37A"/><text x="173" y="265" fill="#1B2016">2</text>
+    <rect x="214" y="240" width="62" height="38" rx="10" fill="#A9BDD8"/><text x="245" y="265" fill="#16202B">3</text>
+    <rect x="286" y="240" width="62" height="38" rx="10" fill="#F6D49B"/><text x="317" y="265" fill="#2A2313">4</text>
+    <rect x="358" y="240" width="62" height="38" rx="10" fill="#EFAF87"/><text x="389" y="265" fill="#2A1B13">5</text>
+    <rect x="430" y="240" width="62" height="38" rx="10" fill="#D98E86"/><text x="461" y="265" fill="#2A1614">6</text>
+    <rect x="502" y="240" width="62" height="38" rx="10" fill="#F7E6BC"/><text x="533" y="265" fill="#2B2618">7</text>
+  </g>
+
+  <!-- Stage 1: the photograph -->
+  <g clip-path="url(#clipA)">
+    <rect x="600" y="64" width="150" height="150" fill="url(#sky)"/>
+    <circle cx="710" cy="104" r="16" fill="#FFF1C9"/>
+    <path d="M600,156 C630,134 660,136 690,152 C712,163 730,148 750,152 L750,168 L600,168 Z" fill="#8FA37A"/>
+    <rect x="600" y="168" width="150" height="20" fill="#A9BDD8"/>
+    <path d="M600,188 C635,176 670,184 705,178 C725,175 740,180 750,178 L750,214 L600,214 Z" fill="#5C7150"/>
+  </g>
+  <rect x="600" y="64" width="150" height="150" rx="18" fill="none" stroke="#FFFFFF" stroke-opacity="0.16"/>
+
+  <!-- Stage 2: numbered outline, the printable sheet -->
+  <g clip-path="url(#clipB)">
+    <rect x="790" y="64" width="150" height="150" fill="#FBFAF7"/>
+    <g fill="none" stroke="#2A2F3A" stroke-width="2.4" stroke-linejoin="round">
+      <circle cx="900" cy="104" r="16"/>
+      <path d="M790,156 C820,134 850,136 880,152 C902,163 920,148 940,152"/>
+      <path d="M790,168 L940,168"/>
+      <path d="M790,188 C825,176 860,184 895,178 C915,175 930,180 940,178"/>
+    </g>
+    <g font-family="Georgia, 'Iowan Old Style', serif" font-size="21" fill="#2A2F3A" text-anchor="middle">
+      <text x="826" y="112">4</text>
+      <text x="900" y="112">5</text>
+      <text x="840" y="163">2</text>
+      <text x="864" y="201">1</text>
+    </g>
+  </g>
+  <rect x="790" y="64" width="150" height="150" rx="18" fill="none" stroke="#FFFFFF" stroke-opacity="0.16"/>
+
+  <!-- Stage 3: painted preview, flat palette fills -->
+  <g clip-path="url(#clipC)">
+    <rect x="980" y="64" width="150" height="150" fill="#F6D49B"/>
+    <rect x="980" y="64" width="150" height="46" fill="#EFAF87"/>
+    <circle cx="1090" cy="104" r="16" fill="#F7E6BC"/>
+    <path d="M980,156 C1010,134 1040,136 1070,152 C1092,163 1110,148 1130,152 L1130,168 L980,168 Z" fill="#8FA37A"/>
+    <rect x="980" y="168" width="150" height="20" fill="#A9BDD8"/>
+    <path d="M980,188 C1015,176 1050,184 1085,178 C1105,175 1120,180 1130,178 L1130,214 L980,214 Z" fill="#5C7150"/>
+  </g>
+  <rect x="980" y="64" width="150" height="150" rx="18" fill="none" stroke="#FFFFFF" stroke-opacity="0.16"/>
+
+  <!-- Flow between stages -->
+  <g stroke="#8B95A8" stroke-width="2.4" fill="none" stroke-linecap="round">
+    <path d="M758,139 L776,139"/><path d="M770,133 L777,139 L770,145"/>
+    <path d="M948,139 L966,139"/><path d="M960,133 L967,139 L960,145"/>
+  </g>
+
+  <g font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="18" fill="#98A2B4" text-anchor="middle">
+    <text x="675" y="242">фото</text>
+    <text x="865" y="242">контур + номера</text>
+    <text x="1055" y="242">закрашено</text>
+  </g>
+</svg>

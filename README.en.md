@@ -1,10 +1,8 @@
 <div align="center">
 
-# dwhiepaint
+<img src="docs/assets/hero-en.svg" width="100%" alt="dwhiepaint — paint-by-numbers from a photo. Three stages: source photo, numbered outline, painted result.">
 
 [Русский](README.md) · **English**
-
-### Paint-by-numbers from a photo
 
 Upload a photo — get a print-ready paint-by-numbers page: a clean outline with
 numbered regions, a preview of the finished (painted) result, and a
@@ -104,12 +102,8 @@ are persisted by `backend-api` in Postgres.
 
 ### Processing pipeline
 
-```
-upload ─▶ analyze ─▶ /jobs ─▶ worker ─────────────────────────────▶ result
-          (auto-k)   (Redis)   subject/faces → superpixels → merge    palette
-                                → smoothing → render → vectorize        + SVG
-                                                                        + preview
-```
+<img src="docs/assets/pipeline-en.svg" width="100%" alt="Processing pipeline: upload → analyze (automatic colour count) → Redis/ARQ queue → worker (subject and faces, superpixels, merge, smoothing, vectorisation) → result (palette, SVG, preview). The worker streams per-stage progress back to the queue.">
+
 
 The canonical pipeline output is a **vector (SVG)**: both the on-screen outline
 and the printable PDF/PNG are rasterized from it at the required resolution, so
