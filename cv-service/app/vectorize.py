@@ -14,8 +14,25 @@ import cv2
 import numpy as np
 import svgwrite
 
-from . import contours, numbering
+from . import config, contours, numbering
 from .cache import PaletteEntry
+
+
+def _label_font_size(radius: float, number_scale: float) -> float:
+    """Digit height that actually fits inside a circle of ``radius``.
+
+    A single digit is roughly 0.6x as wide as it is tall, so its half-diagonal
+    is about 0.583 x height; the height has to stay under ``radius / 0.583``,
+    i.e. ~1.7 x radius, or the number crosses the outline it is supposed to sit
+    inside. The 0.9 factor keeps a margin well inside that bound.
+
+    The lower clamp used to be tied to the image size (``number_scale * 0.7``),
+    which on a 1400 px working image is 11.8 px — larger than a radius-6 region
+    can hold. That is why numbers were seen overflowing their polygons: the
+    radius gate let a region through at 6.0 and then a font too big for it was
+    drawn anyway. The clamp is now an absolute readability floor instead.
+    """
+    return float(np.clip(radius * 0.9, config.LABEL_MIN_FONT_PX, number_scale * 3.0))
 
 
 def _subpath(points: np.ndarray) -> str:
@@ -37,7 +54,7 @@ def to_svg(
     label_img: np.ndarray,
     palette: list[PaletteEntry],
     *,
-    min_label_radius: float = 6.0,
+    min_label_radius: float | None = None,
     stroke_px: float | None = None,
     importance_map: np.ndarray | None = None,
 ) -> str:
@@ -45,6 +62,7 @@ def to_svg(
     h, w = label_img.shape
     stroke = stroke_px if stroke_px is not None else max(1.0, round(min(h, w) * 0.0012))
     number_scale = max(8.0, min(h, w) * 0.012)
+    min_radius = config.LABEL_MIN_RADIUS_PX if min_label_radius is None else min_label_radius
 
     dwg = svgwrite.Drawing(size=(w, h))
     dwg.viewbox(0, 0, w, h)
@@ -75,9 +93,9 @@ def to_svg(
                 continue
             crop = (comp[y:y + bh, x:x + bw] == c).astype(np.uint8)
             rx, ry, radius = numbering.interior_point(crop)
-            if radius < min_label_radius:
+            if radius < min_radius:
                 continue
-            font_size = float(np.clip(radius * 0.9, number_scale * 0.7, number_scale * 3.0))
+            font_size = _label_font_size(radius, number_scale)
             numbers.add(dwg.text(
                 str(entry.index),
                 insert=(x + rx, y + ry + font_size * 0.35),

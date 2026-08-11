@@ -67,6 +67,11 @@ services:
   backend-api:
     build: ./backend-api
     environment:
+      # A published .NET app defaults to Production when this is unset. This
+      # compose file IS the local dev stack — it ships a dev JWT secret and a
+      # dev database password below — so it has to say so, otherwise the
+      # Production guard in Program.cs correctly refuses to start.
+      ASPNETCORE_ENVIRONMENT: Development
       ASPNETCORE_URLS: "http://+:5000"
       ConnectionStrings__Default: "Host=postgres;Port=5432;Database=dwhiepaint;Username=dwhiepaint;Password=${POSTGRES_PASSWORD:-dwhiepaint}"
       CvService__BaseUrl: "http://cv-service:8001"

@@ -22,6 +22,26 @@ def test_superpixel_quantize_separates_clear_colors(solid_blocks_rgb):
     assert 3 <= len(big) <= 5
 
 
+def test_label_font_never_overflows_its_region():
+    """A digit is ~0.6x as wide as tall, so its half-diagonal is ~0.583x its
+    height: the height must stay under ~1.7x the inscribed radius or the number
+    crosses the outline it belongs to.
+
+    Regression guard. The lower clamp used to be number_scale * 0.7 — 11.8 px
+    on a 1400 px image — while the radius gate admitted regions at 6.0. Those
+    regions were handed a font too large to fit, which is exactly the reported
+    "numbers spill over the region borders".
+    """
+    from app import config, vectorize
+
+    number_scale = 16.8  # a 1400px working image
+
+    for radius in (config.LABEL_MIN_RADIUS_PX, 4.0, 6.0, 10.0, 40.0):
+        font = vectorize._label_font_size(radius, number_scale)
+        assert font <= 1.7 * radius, f"radius {radius}: font {font} overflows"
+        assert font >= config.LABEL_MIN_FONT_PX
+
+
 def test_interior_point_lands_inside_a_C_shape():
     """The pole of inaccessibility must be inside the mask, never in the
     concavity of a C — the failure mode of a naive centroid.

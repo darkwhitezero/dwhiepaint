@@ -61,11 +61,14 @@ public static class PaintingEndpoints
         if (!await db.Users.AnyAsync(u => u.Id == userId, ct))
             return Results.Unauthorized();
 
-        byte[] bytes;
-        await using (var ms = new MemoryStream())
+        // file.Length is known, so read straight into a right-sized buffer.
+        // The previous path held two full copies at once: the MemoryStream's
+        // internal buffer, grown by doubling, plus the array ToArray() copied
+        // out of it. (The `new MemoryStream(bytes)` below wraps, not copies.)
+        var bytes = new byte[file.Length];
+        await using (var stream = file.OpenReadStream())
         {
-            await file.CopyToAsync(ms, ct);
-            bytes = ms.ToArray();
+            await stream.ReadExactlyAsync(bytes, ct);
         }
 
         var result = await cv.AnalyzeAsync(new MemoryStream(bytes), file.FileName, file.ContentType, ct);

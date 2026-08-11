@@ -49,6 +49,17 @@ def test_pipeline_survives_degenerate_inputs(name):
     assert svg.lstrip().startswith("<")
 
 
+def test_analyze_rejects_an_image_with_too_many_pixels(monkeypatch):
+    """A small compressed file can carry a huge pixel count. PIL's Image.open
+    is lazy — it parses the header without decoding — so this guard runs before
+    any memory is committed to pixels, which is the only place it is free.
+    """
+    monkeypatch.setattr(config, "MAX_INPUT_PIXELS", 1000)
+
+    with pytest.raises(ValueError, match="too many pixels"):
+        analyze.analyze(_png(CASES["two_color"]))
+
+
 def test_analyze_rejects_broken_bytes():
     with pytest.raises(Exception):
         analyze.analyze(b"this is definitely not an image")

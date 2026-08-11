@@ -9,7 +9,7 @@ import cv2
 import numpy as np
 from skimage.color import deltaE_ciede2000, lab2rgb, rgb2lab
 
-from . import config, importance, render, storage, superpixels, vectorize
+from . import config, importance, numbering, render, storage, superpixels, vectorize
 from .cache import ImageEntry, PaletteEntry, Segmentation, save_segmentation
 from .color_naming import name_for_lab
 
@@ -84,6 +84,11 @@ def segment(
     report("smooth", 0.68)
     cleaned = _smooth_label_map(cleaned, config.LABEL_SMOOTH_SIGMA)
 
+    # Shapes are final here, so this is the first point at which "can a number
+    # fit" can be answered honestly — and the last point before the palette is
+    # built from whatever regions survive.
+    cleaned = _merge_unnumberable(cleaned)
+
     idx_img, palette = _build_palette(cleaned, entry.rgb)
 
     seg = Segmentation(k=k, label_img=idx_img, palette=palette, importance_map=imp_map)
@@ -127,6 +132,65 @@ def _smooth_label_map(labels: np.ndarray, sigma: float) -> np.ndarray:
         win = m > best
         best[win] = m[win]
         out[win] = c
+    return out
+
+
+def _merge_unnumberable(cleaned: np.ndarray) -> np.ndarray:
+    """Absorb regions too narrow to hold a number into their main neighbour.
+
+    A region with no number is unpaintable regardless of its area: nothing
+    tells the painter which colour it takes. Area and shape both turned out to
+    be poor proxies for this — measured over the control images, the median
+    unlabelled region on one of them was 242 px, past every area threshold in
+    ``config``, while merely being elongated enough that no circle fit. So the
+    inscribed radius, the same quantity ``vectorize.to_svg`` uses to decide
+    whether to draw the number, is what decides here too.
+
+    Runs AFTER the merge and the label smoothing, for two reasons: the shapes
+    are final (smoothing can itself thin a region out), and by then there are a
+    few hundred regions rather than the tens of thousands present before the
+    main merge — a distance transform per region is affordable only here.
+
+    Each victim takes the label it shares the longest border with, which is
+    both the cheapest sensible choice and a stable one. Two passes, because
+    absorbing one sliver can leave its neighbour newly numberable or expose
+    another sliver behind it.
+    """
+    min_r = config.LABEL_MIN_RADIUS_PX
+    if min_r <= 0:
+        return cleaned
+
+    out = cleaned.copy()
+    h, w = out.shape
+    kernel = np.ones((3, 3), np.uint8)
+
+    for _ in range(2):
+        merged_any = False
+        for idx in np.unique(out):
+            mask = (out == idx).astype(np.uint8)
+            n, comp, stats, _ = cv2.connectedComponentsWithStats(mask, connectivity=4)
+            for c in range(1, n):
+                x, y, bw, bh, _area = stats[c]
+                crop = (comp[y:y + bh, x:x + bw] == c).astype(np.uint8)
+                if numbering.interior_point(crop)[2] >= min_r:
+                    continue
+
+                # One-pixel ring around the component, read off the label map.
+                y0, y1 = max(0, y - 1), min(h, y + bh + 1)
+                x0, x1 = max(0, x - 1), min(w, x + bw + 1)
+                local = np.zeros((y1 - y0, x1 - x0), np.uint8)
+                local[y - y0:y - y0 + bh, x - x0:x - x0 + bw] = crop
+                ring = cv2.dilate(local, kernel).astype(bool) & ~local.astype(bool)
+                neighbours = out[y0:y1, x0:x1][ring]
+                if neighbours.size == 0:
+                    continue  # region fills the whole image; nothing to merge into
+
+                winner = np.bincount(neighbours.ravel()).argmax()
+                out[y0:y1, x0:x1][local.astype(bool)] = winner
+                merged_any = True
+        if not merged_any:
+            break
+
     return out
 
 
