@@ -144,6 +144,26 @@ CONTOUR_SMOOTH_ITERS = int(os.getenv("CONTOUR_SMOOTH_ITERS", "0"))
 # Still subject to the same absolute CONTOUR_SIMPLIFY_MAX_PX cap.
 CONTOUR_SIMPLIFY_EPS_DETAIL = float(os.getenv("CONTOUR_SIMPLIFY_EPS_DETAIL", "0.0004"))
 
+# --- number placement -------------------------------------------------------
+# A region is only paintable if its NUMBER fits inside it — an unnumbered
+# region leaves the painter with no idea which colour it takes. Both the
+# renderer and metrics.paintability read these, so the measurement and the
+# printed sheet can never disagree about what counts as labelled.
+#
+# Measured over the seven control images: at a 6.0 px radius floor, 37-50% of
+# regions on the gallery images ended up unnumbered. Most were not tiny — on
+# `pixie` the median unlabelled region was 242 px, well past every area
+# threshold in this file — they were merely elongated enough that no 6 px
+# circle fit. Area and shape are both poor proxies; the inscribed radius is
+# the real criterion, so it is now the one that decides.
+#
+# 3.0 px is the floor below which nothing legible fits even at print scale: the
+# working image is ~1400 px on its long side and an A4 page is 4960 px, so a
+# working-resolution digit is multiplied by ~3.5 on paper. LABEL_MIN_FONT_PX of
+# 4.5 becomes ~16 px printed, which is comfortably readable.
+LABEL_MIN_RADIUS_PX = float(os.getenv("LABEL_MIN_RADIUS_PX", "3.0"))
+LABEL_MIN_FONT_PX = float(os.getenv("LABEL_MIN_FONT_PX", "4.5"))
+
 # Gaussian-argmax smoothing of the final label map: blur each color's
 # membership and re-assign each pixel to the strongest nearby color. This
 # rounds superpixel-seam staircases while keeping labels discrete AND shared

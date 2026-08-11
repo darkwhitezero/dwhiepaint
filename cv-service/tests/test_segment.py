@@ -155,6 +155,34 @@ def test_merge_elongation_disabled_leaves_thin_sliver_alone(monkeypatch):
     assert np.any(cleaned == 1)  # unchanged behavior: raw area already clears min_area
 
 
+def test_unnumberable_sliver_is_absorbed_by_its_main_neighbour():
+    """A region no number fits into is unpaintable whatever its area, so it
+    must not survive to the palette. Area alone can't catch this: the sliver
+    below is 210px, well past every area floor in config, and still too narrow
+    to hold a digit.
+    """
+    label_img = np.zeros((60, 120), dtype=np.int32)
+    label_img[:, 60:] = 1
+    label_img[30:33, 20:90] = 2      # 3px-tall sliver straddling both halves
+
+    out = segment._merge_unnumberable(label_img)
+
+    assert 2 not in np.unique(out), "sliver should have been absorbed"
+    assert set(np.unique(out)) == {0, 1}
+
+
+def test_merge_unnumberable_leaves_paintable_regions_alone():
+    """Guard against the pass eating regions that were fine: a number fits in
+    both halves here, so nothing should move.
+    """
+    label_img = np.zeros((60, 120), dtype=np.int32)
+    label_img[:, 60:] = 1
+
+    out = segment._merge_unnumberable(label_img)
+
+    assert np.array_equal(out, label_img)
+
+
 def test_palette_separation_pushes_near_duplicates_apart():
     """Near-identical colors should still be nudged toward distinctness so two
     different numbers don't read as the same swatch on the legend.
