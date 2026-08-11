@@ -30,6 +30,16 @@ builder.Services.Configure<JwtOptions>(builder.Configuration.GetSection(JwtOptio
 var jwt = builder.Configuration.GetSection(JwtOptions.SectionName).Get<JwtOptions>()
           ?? throw new InvalidOperationException("Jwt configuration is missing");
 
+// A known signing key lets anyone mint a valid token. Compose ships a dev
+// default so `docker compose up` works with no setup; that default must never
+// reach a Production build.
+if (builder.Environment.IsProduction() &&
+    jwt.Secret.StartsWith("dev-insecure-secret", StringComparison.Ordinal))
+{
+    throw new InvalidOperationException(
+        "Refusing to start in Production with the development JWT secret. Set Jwt__Secret.");
+}
+
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
     {
@@ -93,6 +103,8 @@ await ApplyMigrationsAsync(app);
 app.MapAuthEndpoints();
 app.MapPaintingEndpoints();
 
+// Liveness only: says the process is up, NOT that it can serve requests.
+// Readiness is /health/db below — point orchestrator probes at that one.
 app.MapGet("/health", () => Results.Ok(new { status = "ok" }));
 
 app.MapGet("/health/db", async (AppDbContext db) =>
@@ -126,5 +138,10 @@ static async Task ApplyMigrationsAsync(WebApplication app)
         }
     }
 
-    logger.LogError("Could not apply migrations after 10 attempts.");
+    // Serving with an unmigrated database looks healthy and then fails at the
+    // first query instead. Refuse to start so the failure surfaces where it
+    // actually happened.
+    logger.LogCritical("Could not apply migrations after 10 attempts; refusing to start.");
+    throw new InvalidOperationException(
+        "Database migrations failed after 10 attempts. Refusing to serve with an unmigrated database.");
 }
