@@ -19,6 +19,15 @@ from .cache import ImageEntry, cache
 def _decode_and_resize(file_bytes: bytes) -> np.ndarray:
     """Decode an uploaded image to an RGB uint8 array with longest side ≤ MAX_SIDE."""
     img = Image.open(io.BytesIO(file_bytes))
+    # Image.open only parses the header — no pixels are decoded yet — so the
+    # size is known before the memory to hold them is ever allocated. A small
+    # compressed file can declare an enormous canvas; refuse it here rather
+    # than after paying for it.
+    width, height = img.size
+    if width * height > config.MAX_INPUT_PIXELS:
+        raise ValueError(
+            f"image has too many pixels: {width}x{height} exceeds {config.MAX_INPUT_PIXELS}"
+        )
     img = ImageOps.exif_transpose(img)  # honor camera orientation
     img = img.convert("RGB")
 

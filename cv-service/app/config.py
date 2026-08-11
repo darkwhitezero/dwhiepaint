@@ -14,6 +14,13 @@ JOB_RESULT_TTL_SECONDS = int(os.getenv("JOB_RESULT_TTL_SECONDS", "3600"))
 
 # Pipeline parameters
 MAX_SIDE = int(os.getenv("MAX_SIDE", "2000"))          # longest image side after resize
+# Reject oversized input before anything is decoded. PIL has its own
+# decompression-bomb guard (~89 Mpx by default, not overridden anywhere here),
+# but that ceiling is far above what this app needs: MAX_SIDE caps the working
+# image at roughly 4 Mpx regardless. 40 Mpx still admits a large phone photo
+# and turns everything past it away while the pixel count is still just a
+# number in a file header.
+MAX_INPUT_PIXELS = int(os.getenv("MAX_INPUT_PIXELS", str(40_000_000)))
 CACHE_TTL_SECONDS = int(os.getenv("CACHE_TTL_SECONDS", "1800"))
 MIN_REGION_AREA_FRAC = float(os.getenv("MIN_REGION_AREA_FRAC", "0.003"))  # 0.3% of image
 DELTA_E_MATCH_THRESHOLD = float(os.getenv("DELTA_E_MATCH_THRESHOLD", "10"))
