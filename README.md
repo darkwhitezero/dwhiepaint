@@ -1,12 +1,12 @@
 <div align="center">
 
-<img src="docs/assets/hero-ru.svg" width="100%" alt="dwhiepaint — раскраска по номерам из фото. Три этапа: исходное фото, нумерованный контур, закрашенный результат.">
+<img src="docs/assets/hero-en.svg" width="100%" alt="dwhiepaint — paint-by-numbers from a photo. Three stages: source photo, numbered outline, painted result.">
 
-**Русский** · [English](README.en.md)
+**English** · [Русский](README.ru.md)
 
-Загрузи фотографию — получи готовую к печати раскраску по номерам:
-чистый контур с пронумерованными областями, предпросмотр закрашенного результата
-и легенду «номер → цвет» с русскими названиями и подсказкой по краскам.
+Upload a photo and get a print-ready paint-by-numbers page: a clean outline with
+numbered regions, a preview of the painted result, and a "number → colour"
+legend with colour names and a suggested real paint.
 
 [![.NET](https://img.shields.io/badge/.NET-10-512BD4?style=flat&logo=dotnet&logoColor=white)](https://dotnet.microsoft.com/)
 [![React](https://img.shields.io/badge/React-19-61DAFB?style=flat&logo=react&logoColor=black)](https://react.dev/)
@@ -20,274 +20,274 @@
 
 ---
 
-## Что это?
+## What is this?
 
-**dwhiepaint** — веб-приложение, которое превращает обычное фото в полноценную
-раскраску по номерам. В отличие от «наивных» онлайн-генераторов, сегментация
-здесь edge-aware и понимает сюжет: главный объект остаётся детальным, а фон
-упрощается в крупные, реально закрашиваемые области.
+**dwhiepaint** is a web app that turns an ordinary photo into a paint-by-numbers
+page. Unlike naïve online generators, it segments along real edges and knows
+which part of the photo is the subject. The subject keeps its detail, and the
+background collapses into large regions that are big enough to paint.
 
-Тяжёлую обработку (в том числе ML-модель отделения объекта от фона) приложение
-считает асинхронно — с прогрессом по стадиям в реальном времени, так что большие
-фото не упираются в таймаут. Результат можно рассмотреть в интерактивном
-просмотрщике и выгрузить в PDF, PNG, SVG или ZIP — вплоть до печати большого
-холста плиткой из листов A4.
+Heavy processing, including the ML model that separates subject from background,
+runs asynchronously and reports progress for each stage in real time, so large
+photos don't hit a request timeout. You can inspect the result in an interactive
+viewer and export it to PDF, PNG, SVG or ZIP. A large canvas can be printed tiled
+across A4 sheets.
 
-## Ключевые возможности
+## Examples
 
-| Возможность | Описание |
-|---|---|
-| **Edge-aware сегментация** | SLIC-суперпиксели + палитра по средним Lab с весом по площади. Границы областей идут по реальным краям, а не по цветовому шуму |
-| **Понимание сюжета (ML)** | `rembg` (u2net) отделяет объект от фона, детектор лиц и карта краёв строят «карту важности»: глаза, текст, мелкие детали сохраняются, плоский фон упрощается |
-| **Автоподбор числа цветов** | Алгоритм сам предлагает количество цветов; можно донастроить ползунком и пресетами детализации (Новичок / Стандарт / Детально) |
-| **Интерактивный просмотрщик** | Зум/пан, переключение слоёв (оригинал ↔ закрашено ↔ контур), подсветка всех областей выбранного цвета |
-| **Форматы экспорта** | PDF (лист-раскраска с миниатюрами-ориентирами + легенда), PNG, масштабируемый SVG, ZIP-пакет со всем сразу |
-| **Печать больших холстов** | Плитка N×N листов A4 с метками реза, перекрытием и страницей-схемой сборки |
-| **Подбор реальных красок** | Для каждого цвета — ближайшая акриловая краска по CIEDE2000, а если точной нет, подсказка «смешать A + B» |
-| **Асинхронная обработка** | Очередь задач на Redis + воркер; прогресс по стадиям в UI, ничего не блокирует запрос |
-| **Аккаунты и шеринг** | JWT-авторизация, история работ, публичные ссылки на готовые раскраски |
-| **Стеклянный интерфейс** | Apple-подобный glassmorphism, светлая и тёмная темы, адаптив |
+A few photos and what comes out of them: a print-ready numbered outline and a
+preview of the painted result. Colour count and detail level are tuned per image.
 
-## Примеры
-
-Несколько фотографий и то, что из них получается: нумерованный контур для печати
-и предпросмотр закрашенного результата. Число цветов и уровень детализации
-подобраны под каждую картинку.
-
-| Оригинал | Раскраска по номерам | Закрашенный предпросмотр |
+| Original | Paint-by-numbers | Painted preview |
 |:---:|:---:|:---:|
-| <img src="docs/gallery/aquarium-original.jpg" width="250"><br><sub>20 цветов · Детально</sub> | <img src="docs/gallery/aquarium-outline.png" width="250"> | <img src="docs/gallery/aquarium-preview.png" width="250"> |
-| <img src="docs/gallery/stars-girl-original.jpg" width="250"><br><sub>24 цвета · Детально</sub> | <img src="docs/gallery/stars-girl-outline.png" width="250"> | <img src="docs/gallery/stars-girl-preview.png" width="250"> |
-| <img src="docs/gallery/demon-original.jpg" width="250"><br><sub>20 цветов · Детально</sub> | <img src="docs/gallery/demon-outline.png" width="250"> | <img src="docs/gallery/demon-preview.png" width="250"> |
-| <img src="docs/gallery/meme-original.jpg" width="250"><br><sub>16 цветов · Детально</sub> | <img src="docs/gallery/meme-outline.png" width="250"> | <img src="docs/gallery/meme-preview.png" width="250"> |
-| <img src="docs/gallery/fish-tunnel-original.jpg" width="250"><br><sub>17 цветов · Детально</sub> | <img src="docs/gallery/fish-tunnel-outline.png" width="250"> | <img src="docs/gallery/fish-tunnel-preview.png" width="250"> |
-| <img src="docs/gallery/pixie-original.jpg" width="250"><br><sub>12 цветов · Детально</sub> | <img src="docs/gallery/pixie-outline.png" width="250"> | <img src="docs/gallery/pixie-preview.png" width="250"> |
+| <img src="docs/gallery/aquarium-original.jpg" width="250" alt="Anime girl watching sharks and rays in an aquarium: original photo"><br><sub>20 colours · Detailed</sub> | <img src="docs/gallery/aquarium-outline.png" width="250" alt="Anime girl watching sharks and rays in an aquarium: numbered outline"> | <img src="docs/gallery/aquarium-preview.png" width="250" alt="Anime girl watching sharks and rays in an aquarium: painted preview"> |
+| <img src="docs/gallery/stars-girl-original.jpg" width="250" alt="Blonde anime girl under a sky of stars and hearts: original photo"><br><sub>24 colours · Detailed</sub> | <img src="docs/gallery/stars-girl-outline.png" width="250" alt="Blonde anime girl under a sky of stars and hearts: numbered outline"> | <img src="docs/gallery/stars-girl-preview.png" width="250" alt="Blonde anime girl under a sky of stars and hearts: painted preview"> |
+| <img src="docs/gallery/demon-original.jpg" width="250" alt="Horned red-eyed demon in front of a pagoda: original photo"><br><sub>20 colours · Detailed</sub> | <img src="docs/gallery/demon-outline.png" width="250" alt="Horned red-eyed demon in front of a pagoda: numbered outline"> | <img src="docs/gallery/demon-preview.png" width="250" alt="Horned red-eyed demon in front of a pagoda: painted preview"> |
+| <img src="docs/gallery/meme-original.jpg" width="250" alt="Meme photo of two men on a train, one holding a magnifying glass: original photo"><br><sub>16 colours · Detailed</sub> | <img src="docs/gallery/meme-outline.png" width="250" alt="Meme photo of two men on a train, one holding a magnifying glass: numbered outline"> | <img src="docs/gallery/meme-preview.png" width="250" alt="Meme photo of two men on a train, one holding a magnifying glass: painted preview"> |
+| <img src="docs/gallery/fish-tunnel-original.jpg" width="250" alt="Tunnel of glowing fish shapes in blue light: original photo"><br><sub>17 colours · Detailed</sub> | <img src="docs/gallery/fish-tunnel-outline.png" width="250" alt="Tunnel of glowing fish shapes in blue light: numbered outline"> | <img src="docs/gallery/fish-tunnel-preview.png" width="250" alt="Tunnel of glowing fish shapes in blue light: painted preview"> |
+| <img src="docs/gallery/pixie-original.jpg" width="250" alt="Line-art chibi girl with braids on a black background: original photo"><br><sub>12 colours · Detailed</sub> | <img src="docs/gallery/pixie-outline.png" width="250" alt="Line-art chibi girl with braids on a black background: numbered outline"> | <img src="docs/gallery/pixie-preview.png" width="250" alt="Line-art chibi girl with braids on a black background: painted preview"> |
 
-## Архитектура
+## Key features
+
+| Feature | Description |
+|---|---|
+| **Edge-aware segmentation** | SLIC superpixels + an area-weighted Lab palette. Region boundaries follow real edges instead of colour noise |
+| **Subject understanding (ML)** | `rembg` (u2net) separates subject from background. A face detector and an edge map build an "importance map" that keeps eyes, text and fine detail and simplifies flat background |
+| **Automatic colour count** | The algorithm suggests a colour count. You can adjust it with a slider and detail presets (Beginner / Standard / Detailed) |
+| **Interactive viewer** | Zoom/pan, layer switching (original ↔ painted ↔ outline), highlight every region of a selected colour |
+| **Export formats** | PDF (colouring page with reference thumbnails + legend), PNG, scalable SVG, ZIP bundle with everything at once |
+| **Large-canvas printing** | Tiles the page across an N×N grid of A4 sheets with crop marks, overlap and an assembly map page |
+| **Real-paint matching** | Each colour gets the nearest acrylic paint by CIEDE2000, plus a "mix A + B" suggestion when there's no exact match |
+| **Asynchronous processing** | Redis task queue + worker. The UI shows progress for each stage, and the request isn't blocked while the job runs |
+| **Accounts and sharing** | JWT auth, work history, public links to finished pages |
+| **Glass interface** | Apple-like glassmorphism, light and dark themes, responsive layout |
+
+## Architecture
 
 ```
 ┌──────────┐   HTTP    ┌──────────────┐   HTTP    ┌──────────────┐
 │ frontend │──────────▶│ backend-api  │──────────▶│  cv-service  │
 │ (React)  │◀──────────│  (.NET 10)   │           │  (FastAPI)   │
 └──────────┘   JSON    └──────┬───────┘           └──────┬───────┘
-                              │                    enqueue │  общий
-                        ┌─────┴─────┐              ┌───────┴──────┐  том
+                              │                    enqueue │  shared
+                        ┌─────┴─────┐              ┌───────┴──────┐  volume
                         │ PostgreSQL│              │    Redis     │───────┐
                         └───────────┘              └───────┬──────┘       │
                                                            │              ▼
                                                     ┌──────┴──────┐  ┌─────────┐
                                                     │   worker    │  │  cache  │
-                                                    │  (ARQ, Py)  │  │ (файлы) │
+                                                    │  (ARQ, Py)  │  │ (files) │
                                                     └─────────────┘  └─────────┘
 ```
 
-Фронт общается только с `backend-api`, который проксирует запросы к CV-сервису.
-Тяжёлую сегментацию `backend-api` ставит в очередь; воркер (та же кодовая база,
-что и `cv-service`) забирает её из Redis, гоняет пайплайн, пишет прогресс обратно
-в Redis и складывает артефакты в общий том, откуда их отдаёт `cv-service`.
+The frontend talks only to `backend-api`, which proxies requests to the CV
+service. Heavy segmentation is enqueued by `backend-api`; the worker (the same
+codebase as `cv-service`) pulls it from Redis, runs the pipeline, writes progress
+back to Redis and drops artifacts into a shared volume that `cv-service` serves.
 
-**Разделение данных:** `cv-service` не имеет доступа к БД — только эфемерный
-кэш по `image_id`. Прогресс задач живёт в Redis (эфемерно), финальные результаты
-сохраняет `backend-api` в Postgres.
+**Data separation:** `cv-service` has no database access — only an ephemeral
+cache keyed by `image_id`. Job progress lives in Redis (ephemeral); final results
+are persisted by `backend-api` in Postgres.
 
-### Сервисы
+### Services
 
-| Сервис | Стек | Описание |
+| Service | Stack | Description |
 |---|---|---|
-| **frontend** | React 19, TypeScript, Vite, react-zoom-pan-pinch | SPA: загрузка, редактор, история, кабинет |
-| **backend-api** | ASP.NET Core (.NET 10), EF Core, Npgsql, JWT | Авторизация, оркестрация задач, персистентность |
-| **cv-service** | Python 3.12, FastAPI, OpenCV, scikit-image, rembg | Анализ, сегментация, векторизация, экспорт |
-| **worker** | тот же образ, что cv-service, команда ARQ | Асинхронная обработка задач из очереди |
-| **redis** | Redis 7 | Очередь задач + эфемерный прогресс |
-| **postgres** | PostgreSQL 16 | Пользователи, работы, палитры |
+| **frontend** | React 19, TypeScript, Vite, react-zoom-pan-pinch | SPA: upload, editor, history, account |
+| **backend-api** | ASP.NET Core (.NET 10), EF Core, Npgsql, JWT | Auth, job orchestration, persistence |
+| **cv-service** | Python 3.12, FastAPI, OpenCV, scikit-image, rembg | Analysis, segmentation, vectorization, export |
+| **worker** | same image as cv-service, ARQ command | Asynchronous processing of queued jobs |
+| **redis** | Redis 7 | Task queue + ephemeral progress |
+| **postgres** | PostgreSQL 16 | Users, works, palettes |
 
-### Конвейер обработки
+### Processing pipeline
 
-<img src="docs/assets/pipeline-ru.svg" width="100%" alt="Конвейер обработки: загрузка → analyze (авто-подбор числа цветов) → очередь Redis/ARQ → worker (объект и лица, суперпиксели, слияние, сглаживание, векторизация) → результат (палитра, SVG, превью). Воркер шлёт прогресс по стадиям обратно в очередь.">
+<img src="docs/assets/pipeline-en.svg" width="100%" alt="Processing pipeline: upload → analyze (automatic colour count) → Redis/ARQ queue → worker (subject and faces, superpixels, merge, smoothing, vectorisation) → result (palette, SVG, preview). The worker streams per-stage progress back to the queue.">
 
 
-Канонический выход пайплайна — **вектор (SVG)**: из него растеризуются и экранный
-контур, и печатный PDF/PNG в нужном разрешении, поэтому линии остаются чистыми на
-любом масштабе. Номер ставится в «полюс недоступности» области
-(`shapely.polylabel`), так что цифра всегда попадает внутрь даже у вогнутых фигур.
+The canonical pipeline output is a **vector (SVG)**: both the on-screen outline
+and the printable PDF/PNG are rasterized from it at the required resolution, so
+lines stay clean at any scale. Each number is placed at the region's "pole of
+inaccessibility" (`shapely.polylabel`), so the digit always lands inside — even
+for concave shapes.
 
-## Быстрый старт
+## Quick start
 
-### Запуск через Docker (рекомендуется)
+### Run with Docker (recommended)
 
 ```bash
 git clone https://github.com/darkwhitezero/dwhiepaint.git
 cd dwhiepaint
 
-cp .env.example .env          # при желании поправьте пароль БД и JWT-секрет
+cp .env.example .env          # optionally tweak the DB password and JWT secret
 docker compose up --build -d
 ```
 
-Первая сборка `cv-service` небыстрая: в образ ставятся ML-зависимости и
-предзагружается модель u2net (~176 МБ), чтобы не тянуть её в рантайме.
+The first `cv-service` build is slow: ML dependencies are installed into the
+image and the u2net model (~176 MB) is preloaded so it isn't fetched at runtime.
 
-| Сервис | URL |
+| Service | URL |
 |---|---|
 | frontend | http://localhost:5173 |
 | backend-api | http://localhost:5000 |
-| cv-service | внутренний, порт 8001 |
+| cv-service | internal, port 8001 |
 | postgres | localhost:5432 |
 
-Проверка здоровья:
+Health checks:
 
 ```bash
 curl http://localhost:5000/health
 curl http://localhost:5000/health/db
 ```
 
-> Меняете код в `cv-service`? Пересоберите **и** пересоздайте оба сервиса,
-> которые используют этот образ: `docker compose up -d --build cv-service worker`.
+> Changing code in `cv-service`? Rebuild **and** recreate both services that use
+> that image: `docker compose up -d --build cv-service worker`.
 
-### Локальная разработка (без Docker)
+### Local development (without Docker)
 
 ```bash
-# frontend — Vite dev server на http://localhost:5173
+# frontend — Vite dev server on http://localhost:5173
 cd frontend && npm install && npm run dev
 
-# backend-api — нужен Postgres на 5432; миграции применяются на старте
+# backend-api — needs Postgres on 5432; migrations run on startup
 dotnet run --project backend-api/DwhiePaint.Api
 
-# cv-service — для очереди нужен Redis; синхронные /analyze и /export
-# работают и без него
+# cv-service — the queue needs Redis; synchronous /analyze and /export
+# work without it
 cd cv-service && pip install -r requirements.txt && uvicorn app.main:app --port 8001
 ```
 
-Адрес backend фронт берёт из `VITE_API_BASE_URL` (по умолчанию `http://localhost:5000`).
+The frontend reads the backend address from `VITE_API_BASE_URL` (defaults to `http://localhost:5000`).
 
-## Структура репозитория
+## Repository layout
 
 ```
 dwhiepaint/
-├── docker-compose.yml          # Оркестрация всех сервисов
+├── docker-compose.yml          # Orchestration of all services
 ├── .env.example
 ├── frontend/                   # React 19 + TypeScript + Vite
 │   └── src/
-│       ├── Editor.tsx          # загрузка → задача → прогресс → результат
-│       ├── ResultViewer.tsx    # зум/пан, слои, инлайн-SVG с подсветкой
-│       ├── PalettePanel.tsx    # палитра + подсветка областей цвета
+│       ├── Editor.tsx          # upload → job → progress → result
+│       ├── ResultViewer.tsx    # zoom/pan, layers, inline SVG with highlight
+│       ├── PalettePanel.tsx    # palette + region highlight per colour
 │       ├── History / Account / AuthScreen / SharedView
-│       ├── api.ts              # HTTP-слой и типы
-│       └── index.css, App.css  # токены темы, стекло, aurora
+│       ├── api.ts              # HTTP layer and types
+│       └── index.css, App.css  # theme tokens, glass, aurora
 ├── backend-api/                # ASP.NET Core (.NET 10)
 │   └── DwhiePaint.Api/
-│       ├── Endpoints/          # Painting + Auth эндпоинты
+│       ├── Endpoints/          # Painting + Auth endpoints
 │       ├── Domain/             # User, Image, Painting, PaletteColor
-│       ├── Data/               # EF Core DbContext + сидинг словаря цветов
-│       ├── Services/           # CvClient (прокси к CV), FileStorage
+│       ├── Data/               # EF Core DbContext + colour-dictionary seed
+│       ├── Services/           # CvClient (proxy to CV), FileStorage
 │       └── Migrations/
 ├── cv-service/                 # Python 3.12 + FastAPI
 │   ├── app/                    # analyze, segment, superpixels, matte, faces,
 │   │                           # importance, vectorize, numbering, render,
 │   │                           # export, jobs, worker
-│   ├── data/                   # colors.json (1017 названий), paints_acrylic.json (24)
+│   ├── data/                   # colors.json (1017 names), paints_acrylic.json (24)
 │   └── tests/                  # pytest
-└── (worker и redis — сервисы в docker-compose.yml)
+└── (worker and redis — services in docker-compose.yml)
 ```
 
 ## API
 
-Фронт ходит только в `backend-api`. Data/JSON-эндпоинты требуют JWT
-(`Authorization: Bearer <token>`); байтовые эндпоинты изображений отдаются
-анонимно по непубличному UUID, чтобы их могли грузить теги `<img>`.
+The frontend calls only `backend-api`. Data/JSON endpoints require a JWT
+(`Authorization: Bearer <token>`); image byte endpoints are served anonymously by
+a non-public UUID so `<img>` tags can load them.
 
-### Авторизация
+### Auth
 
-| Метод | Путь | Описание |
+| Method | Path | Description |
 |---|---|---|
-| POST | `/api/auth/register` | Регистрация, возвращает JWT |
-| POST | `/api/auth/login` | Вход, возвращает JWT |
-| GET | `/api/auth/me` | Текущий пользователь |
+| POST | `/api/auth/register` | Register, returns a JWT |
+| POST | `/api/auth/login` | Log in, returns a JWT |
+| GET | `/api/auth/me` | Current user |
 
-### Раскраски
+### Paintings
 
-| Метод | Путь | Описание |
+| Method | Path | Description |
 |---|---|---|
-| POST | `/api/paintings` | Загрузка фото → анализ (авто-k) |
-| GET | `/api/paintings` | Список работ пользователя |
-| GET | `/api/paintings/:id` | Одна работа + палитра |
-| POST | `/api/paintings/:id/segment` | Поставить задачу сегментации в очередь |
-| GET | `/api/paintings/:id/segment` | Статус/прогресс, а по завершении — результат |
-| GET | `/api/paintings/:id/export` | Экспорт (`?format=pdf\|png\|svg\|zip&pageSize&tiles`) |
-| GET | `/api/paintings/:id/result` | Скачать последний экспорт |
-| POST/DELETE | `/api/paintings/:id/share` | Создать / отозвать публичную ссылку |
+| POST | `/api/paintings` | Upload a photo → analysis (auto-k) |
+| GET | `/api/paintings` | The user's works |
+| GET | `/api/paintings/:id` | One work + palette |
+| POST | `/api/paintings/:id/segment` | Enqueue a segmentation job |
+| GET | `/api/paintings/:id/segment` | Status/progress, and the result when done |
+| GET | `/api/paintings/:id/export` | Export (`?format=pdf\|png\|svg\|zip&pageSize&tiles`) |
+| GET | `/api/paintings/:id/result` | Download the latest export |
+| POST/DELETE | `/api/paintings/:id/share` | Create / revoke a public link |
 
-### Анонимные
+### Anonymous
 
-| Метод | Путь | Описание |
+| Method | Path | Description |
 |---|---|---|
-| GET | `/api/paintings/:id/original` | Исходное фото |
-| GET | `/api/cv-cache/:id/:file` | Артефакты рендера (контур, превью, SVG) |
-| GET | `/api/shared/:token` | Публичная раскраска по ссылке |
-| GET | `/api/shared/:token/result` | Скачать по публичной ссылке |
+| GET | `/api/paintings/:id/original` | The source photo |
+| GET | `/api/cv-cache/:id/:file` | Render artifacts (outline, preview, SVG) |
+| GET | `/api/shared/:token` | Public page by link |
+| GET | `/api/shared/:token/result` | Download via public link |
 
-## Доменная область
+## Domain
 
-- **Раскраска (painting)** — результат обработки одного изображения: карта
-  областей, палитра и набор экспортов.
-- **Палитра** — список цветов (номер, hex, Lab, русское имя) + ближайшая реальная
-  краска и подсказка по смешиванию.
-- **Сегментация** — разбиение изображения на крупные одноцветные области: SLIC →
-  палитра k-means → слияние мелких областей → сглаживание карты меток → контуры.
-- **Карта важности** — где сохранять детали: маска объекта (rembg) + заметность
-  краёв + лица. Модулирует минимальный размер закрашиваемой области.
-- **Задача (job)** — единица асинхронной обработки в очереди Redis со статусом и
-  прогрессом по стадиям.
+- **Painting** — the result of processing one image: a region map, a palette and
+  a set of exports.
+- **Palette** — a list of colours (number, hex, Lab, name) + the nearest real
+  paint and a mixing suggestion.
+- **Segmentation** — splitting the image into large single-colour regions: SLIC →
+  k-means palette → small-region merging → label-map smoothing → contours.
+- **Importance map** — where to keep detail: subject mask (rembg) + edge
+  saliency + faces. It modulates the minimum paintable region size.
+- **Job** — a unit of asynchronous processing in the Redis queue, with a status
+  and per-stage progress.
 
-## Технологии
+## Tech stack
 
-| Компонент | Технологии |
+| Component | Technologies |
 |---|---|
-| Фронтенд | React 19, TypeScript, Vite, react-zoom-pan-pinch, lucide-react |
-| Бэкенд | ASP.NET Core (.NET 10), EF Core, Npgsql, JWT |
+| Frontend | React 19, TypeScript, Vite, react-zoom-pan-pinch, lucide-react |
+| Backend | ASP.NET Core (.NET 10), EF Core, Npgsql, JWT |
 | CV / ML | Python 3.12, FastAPI, OpenCV, scikit-image, scikit-learn, rembg (u2net) + onnxruntime, shapely, svgwrite, cairosvg |
-| Очередь | ARQ (async Redis queue) |
-| База данных | PostgreSQL 16 |
-| Инфраструктура | Docker Compose, Redis 7 |
+| Queue | ARQ (async Redis queue) |
+| Database | PostgreSQL 16 |
+| Infrastructure | Docker Compose, Redis 7 |
 
-## Переменные окружения
+## Environment variables
 
-### .env (корень)
+### .env (root)
 
-| Переменная | По умолчанию | Описание |
+| Variable | Default | Description |
 |---|---|---|
-| `POSTGRES_PASSWORD` | `dwhiepaint` | Пароль БД |
-| `JWT_SECRET` | dev-строка | Длинная случайная строка для подписи JWT (обязательно сменить в проде) |
+| `POSTGRES_PASSWORD` | `dwhiepaint` | Database password |
+| `JWT_SECRET` | dev string | A long random string for signing JWTs (change it in production) |
 
 ### backend-api
 
-| Переменная | Описание |
+| Variable | Description |
 |---|---|
-| `ConnectionStrings__Default` | Строка подключения к PostgreSQL |
-| `CvService__BaseUrl` | Адрес cv-service (в compose — `http://cv-service:8001`) |
-| `Cors__Origin` | Разрешённый origin фронта |
-| `Jwt__Secret` | Секрет для JWT |
+| `ConnectionStrings__Default` | PostgreSQL connection string |
+| `CvService__BaseUrl` | cv-service address (in compose: `http://cv-service:8001`) |
+| `Cors__Origin` | Allowed frontend origin |
+| `Jwt__Secret` | JWT secret |
 
 ### cv-service / worker
 
-| Переменная | По умолчанию | Описание |
+| Variable | Default | Description |
 |---|---|---|
-| `REDIS_URL` | `redis://localhost:6379` | Адрес Redis для очереди |
-| `CACHE_DIR` | `/data/cache` | Общий том с артефактами |
-| `MAX_SIDE` | `2000` | Максимальная сторона рабочего изображения (px) |
-| `SUBJECT_AWARE` | `1` | Включает ML-детализацию (объект/лица/края) |
-| `REMBG_MODEL` | `u2net` | Модель матирования объекта |
+| `REDIS_URL` | `redis://localhost:6379` | Redis address for the queue |
+| `CACHE_DIR` | `/data/cache` | Shared volume with artifacts |
+| `MAX_SIDE` | `2000` | Maximum side of the working image (px) |
+| `SUBJECT_AWARE` | `1` | Enables ML detailing (subject/faces/edges) |
+| `REMBG_MODEL` | `u2net` | Subject-matting model |
 
-## Известные упрощения
+## Known simplifications
 
-- **Набор красок универсальный** (24 цвета), не привязан к конкретному бренду —
-  заменяется файлом `cv-service/data/paints_acrylic.json`.
-- **Ссылки на изображения** отдаются по непубличному UUID, а не по подписанным
-  URL — усиление доступа оставлено на будущее.
+- **The paint set is generic** (24 colours), not tied to a specific brand — swap
+  it out via `cv-service/data/paints_acrylic.json`.
+- **Image links** are served by a non-public UUID rather than signed URLs —
+  hardened access is left for later.
 
 ---
 
 <div align="center">
 
-Сделал **darkwhitezero** · раскраска по номерам из фото
+Made by **darkwhitezero** · paint-by-numbers from a photo
 
 </div>
